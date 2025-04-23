@@ -1,0 +1,1 @@
+ALTER TABLE "render_jobs" RENAME COLUMN "collage_image_path" TO "input_image_path";

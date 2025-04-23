@@ -6,6 +6,7 @@ import {
   getUser,
   updateTeamSubscription
 } from '@/lib/db/queries';
+import { addCredits } from '@/lib/render';
 
 export const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!, {
   apiVersion: '2025-02-24.acacia'
@@ -44,6 +45,86 @@ export async function createCheckoutSession({
   });
 
   redirect(session.url!);
+}
+
+export async function createCreditCheckoutSession({
+  team,
+  userId,
+  packageId,
+  credits,
+  priceInCents
+}: {
+  team: Team;
+  userId: number;
+  packageId: string;
+  credits: number;
+  priceInCents: number;
+}) {
+  // Create a product for this credit package
+  const product = await stripe.products.create({
+    name: `${credits} Render Credits`,
+    description: `${credits} credits for AI interior design renders`,
+  });
+
+  // Create a one-time price for the product
+  const price = await stripe.prices.create({
+    product: product.id,
+    unit_amount: priceInCents,
+    currency: 'usd',
+  });
+
+  // Create the checkout session
+  const session = await stripe.checkout.sessions.create({
+    payment_method_types: ['card'],
+    line_items: [
+      {
+        price: price.id,
+        quantity: 1,
+      }
+    ],
+    mode: 'payment',
+    success_url: `${process.env.BASE_URL}/api/stripe/credit-success?session_id={CHECKOUT_SESSION_ID}&package_id=${packageId}&credits=${credits}`,
+    cancel_url: `${process.env.BASE_URL}/pricing`,
+    customer: team.stripeCustomerId || undefined,
+    client_reference_id: `team:${team.id}|user:${userId}|package:${packageId}|credits:${credits}`,
+    allow_promotion_codes: true,
+    metadata: {
+      teamId: team.id.toString(),
+      userId: userId.toString(),
+      packageId,
+      credits: credits.toString(),
+    },
+  });
+
+  redirect(session.url!);
+}
+
+export async function handleCreditPurchase(session: Stripe.Checkout.Session) {
+  const metadata = session.metadata;
+  
+  if (!metadata?.teamId || !metadata?.userId || !metadata?.credits) {
+    console.error('Missing metadata for credit purchase:', session.id);
+    return;
+  }
+  
+  const teamId = parseInt(metadata.teamId, 10);
+  const userId = parseInt(metadata.userId, 10);
+  const credits = parseInt(metadata.credits, 10);
+  
+  try {
+    // Add credits to the team
+    await addCredits({
+      teamId,
+      userId,
+      amount: credits,
+      description: `Purchased ${credits} credits`,
+      paymentId: session.payment_intent as string,
+    });
+    
+    console.log(`Successfully added ${credits} credits to team ${teamId}`);
+  } catch (error) {
+    console.error('Error adding credits:', error);
+  }
 }
 
 export async function createCustomerPortalSession(team: Team) {

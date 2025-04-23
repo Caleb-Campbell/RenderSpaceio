@@ -3,10 +3,14 @@ import type { Metadata, Viewport } from 'next';
 import { Manrope } from 'next/font/google';
 import { UserProvider } from '@/lib/auth';
 import { getUser } from '@/lib/db/queries';
+import { NextSSRPlugin } from '@uploadthing/react/next-ssr-plugin';
+import { extractRouterConfig } from 'uploadthing/server';
+import { uploadRouter } from '@/lib/uploadthing';
+import { PostHogProvider } from '@/components/PostHogProvider';
 
 export const metadata: Metadata = {
-  title: 'Next.js SaaS Starter',
-  description: 'Get started quickly with Next.js, Postgres, and Stripe.',
+  title: 'RenderSpace - AI Interior Design Visualization',
+  description: 'Transform your interior design collages into stunning visualizations using AI.',
 };
 
 export const viewport: Viewport = {
@@ -25,10 +29,22 @@ export default function RootLayout({
   return (
     <html
       lang="en"
-      className={`bg-white dark:bg-gray-950 text-black dark:text-white ${manrope.className}`}
+      className={`bg-background text-foreground ${manrope.className}`}
     >
-      <body className="min-h-[100dvh] bg-gray-50">
-        <UserProvider userPromise={userPromise}>{children}</UserProvider>
+      <body className="min-h-[100dvh] bg-background">
+        <NextSSRPlugin
+          /**
+           * The `extractRouterConfig` will extract **only** the route configs
+           * from the router to prevent additional information from being
+           * leaked to the client.
+           */
+          routerConfig={extractRouterConfig(uploadRouter)}
+        />
+        <PostHogProvider>
+          <UserProvider userPromise={userPromise}>
+            {children}
+          </UserProvider>
+        </PostHogProvider>
       </body>
     </html>
   );

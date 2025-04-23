@@ -3,6 +3,8 @@ import type { NextRequest } from 'next/server';
 import { signToken, verifyToken } from '@/lib/auth/session';
 
 const protectedRoutes = '/dashboard';
+// Read environment variable directly in middleware since it's running in Edge runtime
+const earlyAccessOnly = process.env.NEXT_PUBLIC_EARLY_ACCESS_ONLY === 'true';
 
 export async function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;
@@ -11,6 +13,11 @@ export async function middleware(request: NextRequest) {
 
   if (isProtectedRoute && !sessionCookie) {
     return NextResponse.redirect(new URL('/sign-in', request.url));
+  }
+
+  // Redirect authenticated users to early access page if feature flag is enabled
+  if (earlyAccessOnly && sessionCookie && isProtectedRoute) {
+    return NextResponse.redirect(new URL('/early-access', request.url));
   }
 
   let res = NextResponse.next();
@@ -44,5 +51,6 @@ export async function middleware(request: NextRequest) {
 }
 
 export const config = {
-  matcher: ['/((?!api|_next/static|_next/image|favicon.ico).*)'],
+  // Make sure we don't redirect from the early-access page, API routes, and static assets
+  matcher: ['/((?!api|_next/static|_next/image|favicon.ico|early-access).*)'],
 };

@@ -1,0 +1,1 @@
+ALTER TABLE "render_jobs" ADD COLUMN "credit_deducted" boolean DEFAULT false NOT NULL;

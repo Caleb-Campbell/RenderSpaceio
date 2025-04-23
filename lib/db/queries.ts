@@ -1,6 +1,6 @@
-import { desc, and, eq, isNull } from 'drizzle-orm';
+import { desc, and, eq, isNull, count, gte } from 'drizzle-orm';
 import { db } from './drizzle';
-import { activityLogs, teamMembers, teams, users } from './schema';
+import { activityLogs, teamMembers, teams, users, renderJobs, ActivityType, RenderStatus } from './schema';
 import { cookies } from 'next/headers';
 import { verifyToken } from '@/lib/auth/session';
 
@@ -126,4 +126,63 @@ export async function getTeamForUser(userId: number) {
   });
 
   return result?.teamMembers[0]?.team || null;
+}
+
+export async function logActivity({
+  teamId,
+  userId,
+  action,
+  ipAddress,
+}: {
+  teamId: number;
+  userId: number;
+  action: ActivityType | string;
+  ipAddress: string;
+}) {
+  return await db.insert(activityLogs).values({
+    teamId,
+    userId,
+    action,
+    ipAddress,
+    timestamp: new Date(),
+  });
+}
+
+export async function getRecentRendersForTeam(teamId: number, limit: number = 3) {
+  return await db
+    .select({
+      id: renderJobs.id,
+      title: renderJobs.title,
+      resultImagePath: renderJobs.resultImagePath,
+      createdAt: renderJobs.createdAt,
+    })
+    .from(renderJobs)
+    .where(and(eq(renderJobs.teamId, teamId), eq(renderJobs.status, RenderStatus.COMPLETED)))
+    .orderBy(desc(renderJobs.createdAt))
+    .limit(limit);
+}
+
+export async function getTotalRendersForTeam(teamId: number) {
+  const result = await db
+    .select({ value: count() })
+    .from(renderJobs)
+    .where(and(eq(renderJobs.teamId, teamId), eq(renderJobs.status, RenderStatus.COMPLETED)));
+
+  return result[0]?.value ?? 0;
+}
+
+export async function getRecentRendersCountForTeam(teamId: number, days: number = 7) {
+  const dateThreshold = new Date();
+  dateThreshold.setDate(dateThreshold.getDate() - days);
+
+  const result = await db
+    .select({ value: count() })
+    .from(renderJobs)
+    .where(and(
+      eq(renderJobs.teamId, teamId),
+      eq(renderJobs.status, RenderStatus.COMPLETED),
+      gte(renderJobs.createdAt, dateThreshold)
+    ));
+
+  return result[0]?.value ?? 0;
 }

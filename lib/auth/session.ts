@@ -1,7 +1,8 @@
 import { compare, hash } from 'bcryptjs';
 import { SignJWT, jwtVerify } from 'jose';
 import { cookies } from 'next/headers';
-import { NewUser } from '@/lib/db/schema';
+import { NewUser, User, Team } from '@/lib/db/schema';
+import { getUser, getTeamForUser } from '@/lib/db/queries';
 
 const key = new TextEncoder().encode(process.env.AUTH_SECRET);
 const SALT_ROUNDS = 10;
@@ -56,4 +57,20 @@ export async function setSession(user: NewUser) {
     secure: true,
     sameSite: 'lax',
   });
+}
+
+/**
+ * Get the current logged-in user from the session
+ */
+export async function getSessionUser(): Promise<User | null> {
+  return await getUser();
+}
+
+/**
+ * Get the team associated with the current logged-in user
+ */
+export async function getSessionTeam(): Promise<Team | null> {
+  const user = await getSessionUser();
+  if (!user) return null;
+  return await getTeamForUser(user.id);
 }

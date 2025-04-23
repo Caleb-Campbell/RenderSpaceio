@@ -1,6 +1,22 @@
-# Next.js SaaS Starter
+# RenderSpace
 
-This is a starter template for building a SaaS application using **Next.js** with support for authentication, Stripe integration for payments, and a dashboard for logged-in users.
+RenderSpace is an AI-powered interior design visualization platform built on Next.js. Upload your design elements and our AI will generate stunning interior space visualizations in seconds.
+
+## Early Access Mode
+
+RenderSpace supports an "Early Access" mode where users are redirected to an early access waitlist page after signing in. This is useful when features are still in development but you want to allow users to sign up for updates.
+
+### Configuration
+
+1. Create a `.env.local` file based on the `.env.local.example` template
+2. Set the `NEXT_PUBLIC_EARLY_ACCESS_ONLY` environment variable:
+   - `NEXT_PUBLIC_EARLY_ACCESS_ONLY=true` - All authenticated users see only the early access page
+   - `NEXT_PUBLIC_EARLY_ACCESS_ONLY=false` - Normal app functionality (default)
+
+### Implementation Notes
+
+- The early access flag is accessed directly from `process.env` in middleware (Edge runtime)
+- In regular server or client components, access through the config object: `import { config } from '@/lib/config'`
 
 **Demo: [https://next-saas-start.vercel.app/](https://next-saas-start.vercel.app/)**
 

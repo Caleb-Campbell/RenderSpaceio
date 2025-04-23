@@ -3,7 +3,7 @@
 import Link from 'next/link';
 import { use, useState, Suspense } from 'react';
 import { Button } from '@/components/ui/button';
-import { CircleIcon, Home, LogOut } from 'lucide-react';
+import { CircleIcon, Home, LogOut, MessageSquareQuoteIcon } from 'lucide-react';
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -14,6 +14,8 @@ import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { useUser } from '@/lib/auth';
 import { signOut } from '@/app/(login)/actions';
 import { useRouter } from 'next/navigation';
+import Image from 'next/image';
+import { usePostHog } from 'posthog-js/react';
 
 function UserMenu() {
   const [isMenuOpen, setIsMenuOpen] = useState(false);
@@ -32,13 +34,13 @@ function UserMenu() {
       <>
         <Link
           href="/pricing"
-          className="text-sm font-medium text-gray-700 hover:text-gray-900"
+          className="text-sm font-medium text-foreground hover:text-primary"
         >
           Pricing
         </Link>
         <Button
           asChild
-          className="bg-black hover:bg-gray-800 text-white text-sm px-4 py-2 rounded-full"
+          className="bg-primary hover:bg-primary/90 text-primary-foreground text-sm px-4 py-2"
         >
           <Link href="/sign-up">Sign Up</Link>
         </Button>
@@ -81,11 +83,11 @@ function UserMenu() {
 
 function Header() {
   return (
-    <header className="border-b border-gray-200">
+    <header className="border-b border-border">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4 flex justify-between items-center">
         <Link href="/" className="flex items-center">
-          <CircleIcon className="h-6 w-6 text-orange-500" />
-          <span className="ml-2 text-xl font-semibold text-gray-900">ACME</span>
+          <Image src="/favicon.ico" alt="RenderSpace" width={32} height={32} />
+          <span className="ml-2 text-xl font-semibold text-foreground">RenderSpace</span>
         </Link>
         <div className="flex items-center space-x-4">
           <Suspense fallback={<div className="h-9" />}>
@@ -97,11 +99,51 @@ function Header() {
   );
 }
 
+function Footer() {
+  const currentYear = new Date().getFullYear();
+  return (
+    <footer className="border-t border-border mt-auto py-4 text-center text-sm text-muted-foreground">
+      © {currentYear} RenderSpace. All rights reserved.
+    </footer>
+  );
+}
+
+function SupportButton() {
+  const posthog = usePostHog();
+
+  const handleSupportClick = () => {
+    // Capture an event. Configure a PostHog survey/widget
+    // to trigger based on this event in your PostHog project settings.
+    posthog?.capture('support_widget_opened');
+
+    // Alternatively, if using the standard PostHog toolbar for feedback:
+    // posthog?.loadToolbar({ props: { temporaryToken: 'YOUR_TEMP_TOKEN' } });
+    // Replace 'YOUR_TEMP_TOKEN' if needed, or remove props if not.
+  };
+
+  return (
+    <Button
+      variant="outline"
+      size="icon"
+      className="fixed bottom-6 right-6 z-50 rounded-full shadow-lg"
+      onClick={handleSupportClick}
+      aria-label="Support"
+    >
+      <MessageSquareQuoteIcon className="h-5 w-5" />
+    </Button>
+  );
+}
+
+
 export default function Layout({ children }: { children: React.ReactNode }) {
   return (
-    <section className="flex flex-col min-h-screen">
+    <section className="flex flex-col min-h-screen relative">
       <Header />
-      {children}
+      <main className="flex-grow">{children}</main>
+      <Footer />
+      <Suspense fallback={null}> {/* Ensure PostHog is loaded */}
+        <SupportButton />
+      </Suspense>
     </section>
   );
 }
