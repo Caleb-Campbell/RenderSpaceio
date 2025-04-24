@@ -37,22 +37,22 @@ export async function POST(request: NextRequest) {
       inputImageUrl,
     });
 
-    // Define job options with explicit type
-    const jobOptions: JobsOptions = {
-        timeout: 300000, // 5 minutes in milliseconds
-        attempts: 2,     // Allow 1 retry if the job fails
-        removeOnComplete: true, // Keep queue clean
-        removeOnFail: { count: 100 } // Keep last 100 failed jobs
-    } as JobsOptions; // Use type assertion
-
     // Enqueue the job for background processing with options
-    await renderQueue.add(
-      'renderJob',   // Job name
-      { jobId: job.id }, // Job data
-      jobOptions     // Pass the defined options object
-    );
-    console.log(`Enqueued job ${job.id} with timeout and retry options.`);
+  // Define job options with explicit type
+  const jobOptions: JobsOptions = {
+    timeout: 300000, // 5 minutes in milliseconds
+    attempts: 2,     // Allow 1 retry if the job fails
+    removeOnComplete: true, // Keep queue clean
+    removeOnFail: { count: 100 } // Keep last 100 failed jobs
+} as JobsOptions; // Use type assertion
 
+// Enqueue the job for background processing with options
+await renderQueue.add(
+  'renderJob',   // Job name
+  { jobId: job.id }, // Job data
+  jobOptions     // Pass the defined options object
+);
+console.log(`Enqueued job ${job.id} with timeout and retry options.`);
     // Return the job ID immediately
     return NextResponse.json({
       success: true,
