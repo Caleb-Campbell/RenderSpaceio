@@ -77,7 +77,7 @@ async function uploadBufferToUploadThing(imageBuffer: Buffer, filename: string):
 }
 
 /**
- * Generates an interior design visualization using OpenAI's DALL-E 3 model
+ * Generates an interior design visualization using OpenAI's new gpt-image-1 model
  * @param params The parameters for the render request
  * @returns An object containing the render result or error
  */
@@ -129,7 +129,7 @@ export async function generateRender(params: RenderParams): Promise<RenderResult
     // 3. Make the API call to OpenAI images.edit
     let image_base64: string | undefined;
     const apiParams = {
-      model: "dall-e-3", // Correct DALL-E 3 model name
+      model: "gpt-image-1", // Correct DALL-E 3 model name
       prompt: prompt,
       n: 1,
       size: "1024x1024" as const, // Specify desired size using 'as const' for literal type
