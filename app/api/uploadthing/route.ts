@@ -5,3 +5,6 @@ import { uploadRouter } from "@/lib/uploadthing";
 export const { GET, POST } = createRouteHandler({
   router: uploadRouter,
 });
+
+// Force Node.js runtime (Serverless)
+export const runtime = 'nodejs';
