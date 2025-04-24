@@ -1,19 +1,36 @@
 import { Queue, Worker, Job } from 'bullmq';
-import IORedis from 'ioredis';
-import { executeRenderPipeline } from '../render'; // We will create this function later
+// Remove the direct IORedis import if no longer needed directly
+// import IORedis from 'ioredis'; 
+import { executeRenderPipeline } from '../render';
+import { getRedisClient } from '../redis'; // Import the shared client function
 
-// Use the environment variable, fallback to localhost only if not set
-const redisUrl = process.env.REDIS_URL || 'redis://localhost:6379';
+// Remove the local Redis connection creation
+// const redisUrl = process.env.REDIS_URL || 'redis://localhost:6379';
+// const connection = new IORedis(redisUrl, {
+//   maxRetriesPerRequest: null, // Important for BullMQ
+// });
 
-const connection = new IORedis(redisUrl, {
-  maxRetriesPerRequest: null, // Important for BullMQ
-});
+// Get the shared Redis client instance
+const connection = getRedisClient();
 
 // Define the queue name
 const RENDER_QUEUE_NAME = 'renderQueue';
 
-// Create the queue instance
-export const renderQueue = new Queue(RENDER_QUEUE_NAME, { connection });
+// Create the queue instance, passing the shared connection
+// Add options to remove completed/failed jobs
+export const renderQueue = new Queue(RENDER_QUEUE_NAME, { 
+  connection,
+  defaultJobOptions: { // Add default options here
+    removeOnComplete: { 
+      age: 3600, // Keep completed jobs for 1 hour (3600 seconds)
+      // count: 1000 // Alternatively, keep the last 1000 completed jobs
+    },
+    removeOnFail: {
+      age: 24 * 3600, // Keep failed jobs for 24 hours (86400 seconds)
+      // count: 5000 // Alternatively, keep the last 5000 failed jobs
+    }
+  }
+});
 
 // Define and export the job data interface
 export interface RenderJobData {
@@ -66,8 +83,8 @@ process.on('SIGINT', async () => {
   console.log('Closing worker and queue connections...');
   await renderWorker.close();
   await renderQueue.close();
-  await connection.quit();
-  console.log('Connections closed.');
+  // await connection.quit(); // Remove or comment out if shared client lifecycle is managed elsewhere
+  console.log('Worker and Queue closed.');
   process.exit(0);
 });
 
@@ -75,7 +92,7 @@ process.on('SIGTERM', async () => {
   console.log('Closing worker and queue connections...');
   await renderWorker.close();
   await renderQueue.close();
-  await connection.quit();
-  console.log('Connections closed.');
+  // await connection.quit(); // Remove or comment out if shared client lifecycle is managed elsewhere
+  console.log('Worker and Queue closed.');
   process.exit(0);
 });
