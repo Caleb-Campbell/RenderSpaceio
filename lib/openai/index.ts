@@ -133,10 +133,18 @@ export async function generateRender(params: RenderParams): Promise<RenderResult
 
     // 2. Create the prompt for editing
     const prompt = `Transform this collage image into a photorealistic interior design visualization of a ${params.roomType} with ${params.lighting} lighting. Maintain the key design elements, patterns, and style from the collage but render it as a realistic 3D scene.`;
-    console.log("Calling OpenAI images.edit API with prompt:", prompt.substring(0, 100) + "...");
-
+    
     // 3. Make the API call to OpenAI images.edit
     let image_base64: string | undefined;
+    const apiParams = {
+      model: "gpt-image-1", // Using a placeholder model name as per original code
+      prompt: prompt,
+      n: 1, 
+      size: "1024x1024" as const, // Specify desired size using 'as const' for literal type
+      response_format: 'b64_json' as const // Explicitly request base64
+    };
+    console.log("Calling OpenAI images.edit API with params:", { ...apiParams, image: `[File object for ${params.inputImagePath}]` }); // Log params without image data
+
     try {
       // The OpenAI SDK expects a File-like object (like the browser File API) or ReadStream.
       // Create a File object from the buffer.
@@ -144,23 +152,33 @@ export async function generateRender(params: RenderParams): Promise<RenderResult
       const imageBlob = new Blob([imageBuffer], { type: 'image/png' }); // Assuming PNG, adjust if needed
       const imageFile = new File([imageBlob], imageName, { type: 'image/png' });
 
+      console.log(`Sending imageFile: name=${imageFile.name}, size=${imageFile.size}, type=${imageFile.type}`);
+
       const response = await openai.images.edit({
-        model: "gpt-image-1",
+        ...apiParams, // Spread the defined parameters
         image: imageFile, // Pass the created File object
-        prompt: prompt,
-        n: 1, 
-        size: "1024x1024", // Specify desired size
       });
 
-      // Get the base64 image data from the response
-      image_base64 = response.data[0].b64_json;
-      if (!image_base64) {
-        throw new Error('No b64_json in OpenAI images.edit response');
-      }
-      console.log("OpenAI images.edit generated base64 data (first 60 chars):", image_base64.substring(0, 60) + "...");
+      console.log("Received OpenAI images.edit response structure:", JSON.stringify(response, null, 2)); // Log the full response structure
 
-    } catch (openaiError) {
+      // Get the base64 image data from the response
+      image_base64 = response.data[0]?.b64_json; // Use optional chaining
+      if (!image_base64) {
+        console.error("OpenAI response missing b64_json:", response);
+        throw new Error('No b64_json in OpenAI images.edit response data[0]');
+      }
+      console.log("OpenAI images.edit successfully generated base64 data (first 60 chars):", image_base64.substring(0, 60) + "...");
+
+    } catch (openaiError: any) { // Type error as any to access properties
       console.error("OpenAI API error (images.edit):", openaiError);
+      // Log more details if available (e.g., response status, error message)
+      if (openaiError.response) {
+        console.error("OpenAI API Error Response Status:", openaiError.response.status);
+        console.error("OpenAI API Error Response Data:", openaiError.response.data);
+      } else {
+        console.error("OpenAI API Error Message:", openaiError.message);
+      }
+      
       // In development, fall back to placeholder if OpenAI call fails
       if (process.env.NODE_ENV !== "production") {
         console.warn("Using placeholder image due to OpenAI API error");

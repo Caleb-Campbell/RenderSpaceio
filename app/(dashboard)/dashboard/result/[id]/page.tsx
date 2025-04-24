@@ -51,8 +51,8 @@ function ResultContent({ paramsPromise }: { paramsPromise: Promise<ResolvedParam
   const [roomType, setRoomType] = useState('');
   const [lighting, setLighting] = useState(''); // Original lighting
   const [selectedLighting, setSelectedLighting] = useState(''); // User-selected lighting for re-render
-  const [inputImage, setInputImage] = useState('/placeholder-room.jpg'); // State for input image
-  const [renderImage, setRenderImage] = useState('/placeholder-render.jpg'); // State for result image
+  const [inputImage, setInputImage] = useState<string | null>(null); // State for input image, initialize as null
+  const [renderImage, setRenderImage] = useState<string | null>(null); // State for result image, initialize as null
   const [renderJob, setRenderJob] = useState<any>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [isRerendering, setIsRerendering] = useState(false); // Added state for re-render button
@@ -85,13 +85,10 @@ function ResultContent({ paramsPromise }: { paramsPromise: Promise<ResolvedParam
         setLighting(originalLighting);
         setSelectedLighting(originalLighting); // Initialize selected lighting
 
-        // Set the image URLs if available
-        if (job.inputImagePath) {
-          setInputImage(job.inputImagePath);
-        }
-        if (job.resultImagePath) {
-          setRenderImage(job.resultImagePath);
-        }
+        // Set the image URLs only if they exist, otherwise they remain null
+        setInputImage(job.inputImagePath || null);
+        setRenderImage(job.resultImagePath || null);
+
 
         setIsLoading(false);
       } catch (err) {
@@ -106,7 +103,7 @@ function ResultContent({ paramsPromise }: { paramsPromise: Promise<ResolvedParam
   
   // Updated handleDownload function to fetch blob and force download
   const handleDownload = async () => {
-    if (!renderImage || renderImage.startsWith('/placeholder')) {
+    if (!renderImage) { // Check if renderImage is null
       alert('No render image available to download');
       return;
     }
@@ -142,7 +139,7 @@ function ResultContent({ paramsPromise }: { paramsPromise: Promise<ResolvedParam
   };
 
   const handleShare = () => {
-    if (!renderImage || renderImage.startsWith('/placeholder')) {
+    if (!renderImage) { // Check if renderImage is null
       alert('No render image available to share');
       return;
     }
@@ -240,7 +237,7 @@ function ResultContent({ paramsPromise }: { paramsPromise: Promise<ResolvedParam
                   <div className="absolute inset-0 flex items-center justify-center text-gray-400">
                     <p className="text-red-500">{error}</p>
                   </div>
-                ) : (
+                ) : renderImage ? ( // Only render Image if renderImage is not null
                   <Image 
                     src={renderImage} 
                     alt={`${getRoomTypeLabel(roomType)} with ${getLightingLabel(lighting)} lighting`}
@@ -248,6 +245,10 @@ function ResultContent({ paramsPromise }: { paramsPromise: Promise<ResolvedParam
                     className="object-cover"
                     priority
                   />
+                ) : ( // Display message if loading is done but renderImage is still null
+                   <div className="absolute inset-0 flex items-center justify-center text-gray-400">
+                    <p>Render image not available.</p> 
+                  </div>
                 )}
               </div>
               
@@ -261,12 +262,13 @@ function ResultContent({ paramsPromise }: { paramsPromise: Promise<ResolvedParam
               </div>
 
               {/* Input Image Preview */}
-              {!isLoading && !error && inputImage && (
+              {/* Input Image Preview - Only show if inputImage is not null */}
+              {!isLoading && !error && inputImage && ( 
                 <div className="mt-6">
                   <h3 className="text-sm font-medium text-gray-600 mb-2">Input Image</h3>
                   <div className="relative w-full aspect-square bg-gray-100 rounded-lg overflow-hidden border">
                     <Image 
-                      src={inputImage} 
+                      src={inputImage} // inputImage is already checked for null above
                       alt="Input image used for the render"
                       fill
                       className="object-contain" // Use contain to show the whole image

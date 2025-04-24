@@ -129,7 +129,7 @@ export const signUp = validatedAction(signUpSchema, async (data, formData) => {
     email,
     passwordHash,
     role: 'owner', // Default role, will be overridden if there's an invitation
-    credits: 3, // Give new users 3 free credits to try the platform
+    credits: 0,
   };
 
   const [createdUser] = await db.insert(users).values(newUser).returning();
@@ -183,7 +183,7 @@ export const signUp = validatedAction(signUpSchema, async (data, formData) => {
     // Create a new team if there's no invitation
     const newTeam: NewTeam = {
       name: `${email}'s Team`,
-      credits: 3, // Give new teams 3 free credits to try the platform
+      credits: 0,
     };
 
     [createdTeam] = await db.insert(teams).values(newTeam).returning();

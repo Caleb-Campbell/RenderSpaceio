@@ -63,7 +63,7 @@ export default function EarlyAccessPage() {
   const bottomCarouselImages = [
     '/placeholder-4.jpg',
     '/placeholder-5.jpg',
-    '/placeholder-render.jpg',
+    // '/placeholder-render.jpg', // Removed problematic placeholder
     '/placeholder-room.jpg',
   ];
 
