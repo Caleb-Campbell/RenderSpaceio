@@ -179,7 +179,7 @@ export async function processRenderJob(job: { id: string }) { // Changed id type
   } catch (error) {
     console.error(`Error processing render job ${job.id}:`, error);
     
-    // If we get an error related to UploadThing but have a DALL-E image, still mark as success
+    // If we get an error related to UploadThing but have a gpt-image-1 image, still mark as success
     const errorMessage = error instanceof Error ? error.message : 'Unknown error';
     
     // Check for generatedImageUrl in fallback logic

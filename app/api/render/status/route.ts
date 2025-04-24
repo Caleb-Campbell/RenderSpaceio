@@ -1,9 +1,13 @@
+import { db } from '@/lib/db/drizzle'; // Import db
+import { renderJobs, RenderStatus } from '@/lib/db/schema'; // Import renderJobs schema and RenderStatus enum
+import { eq } from 'drizzle-orm'; // Import eq operator
 import { getRenderJob, processRenderJob } from '@/lib/render';
 import { NextRequest, NextResponse } from 'next/server';
 import { getSessionUser } from '@/lib/auth/session';
-import { RenderStatus } from '@/lib/db/schema';
+// RenderStatus is already imported from schema
 
 export async function GET(request: NextRequest) {
+  // ... (authentication and jobId fetching logic remains the same) ...
   try {
     // Authenticate the request
     const user = await getSessionUser();
@@ -38,26 +42,60 @@ export async function GET(request: NextRequest) {
       return NextResponse.json(
         { error: 'Unauthorized access to render job' },
         { status: 403 }
-      );
-    }
+       );
+     }
 
-    // If job is pending, try to process it if it's been more than 5 seconds since creation
-    // This is to ensure we don't start processing jobs that are already being processed
-    if (job.status === RenderStatus.PENDING) {
-      const now = new Date();
-      const jobCreatedAt = new Date(job.createdAt);
-      const timeDiffSeconds = (now.getTime() - jobCreatedAt.getTime()) / 1000;
-      
-      if (timeDiffSeconds > 5) {
-        // Process the job in the background
-        processRenderJob(job).catch(error => {
-          console.error('Error processing render job:', error);
-        });
+    const now = new Date();
+    // Use createdAt to track total time since job creation for timeout
+    const jobCreatedAtForTimeout = new Date(job.createdAt);
+    const timeDiffMinutes = (now.getTime() - jobCreatedAtForTimeout.getTime()) / (1000 * 60);
+    const TIMEOUT_MINUTES = 6; // Set timeout threshold (e.g., 6 minutes)
+
+    // Check for timeout if the job is still PENDING or PROCESSING for too long
+    if ((job.status === RenderStatus.PROCESSING || job.status === RenderStatus.PENDING) && timeDiffMinutes > TIMEOUT_MINUTES) {
+      console.warn(`Render job ${job.id} timed out after ${TIMEOUT_MINUTES} minutes (status: ${job.status}). Marking as failed.`);
+      try {
+        // Update the job status to FAILED due to timeout
+        const [updatedJobResult] = await db.update(renderJobs) // Correctly use db and renderJobs
+          .set({
+            status: RenderStatus.FAILED,
+            errorMessage: `Render timed out after ${TIMEOUT_MINUTES} minutes.`,
+            completedAt: now, // Mark completion time as now
+          })
+          .where(eq(renderJobs.id, job.id)) // Correctly use eq and renderJobs
+          .returning(); // Return the updated job data
+
+        // Return the updated (failed) job data
+        // Use the result from returning() or fallback to modifying the existing job object
+        const finalFailedJob = updatedJobResult || { ...job, status: RenderStatus.FAILED, errorMessage: `Render timed out after ${TIMEOUT_MINUTES} minutes.` };
+        return NextResponse.json(finalFailedJob);
+
+      } catch (dbError) {
+          console.error(`Failed to update job ${job.id} status to FAILED after timeout:`, dbError);
+          // Return the original job data but indicate a timeout occurred if DB update fails
+          return NextResponse.json({ ...job, status: RenderStatus.FAILED, errorMessage: `Render timed out, but failed to update status in DB.` });
       }
     }
 
-    // Return the job data
+    // If job is pending, try to trigger processing (original logic)
+    if (job.status === RenderStatus.PENDING) {
+      const jobCreatedAt = new Date(job.createdAt);
+      const timeDiffSeconds = (now.getTime() - jobCreatedAt.getTime()) / 1000;
+      if (timeDiffSeconds > 5) {
+        console.log(`Triggering processing for pending job ${job.id}`);
+        // Process the job in the background - fire and forget
+        // Ensure processRenderJob updates 'updatedAt' when it sets status to PROCESSING
+        processRenderJob(job).catch(error => {
+          // Log errors during the *triggering* of the process, not the process itself
+          console.error(`Error triggering background processing for job ${job.id}:`, error);
+        });
+        // Return the current PENDING status, it will update on next poll
+      }
+    }
+
+    // Return the current job data (could be PENDING, PROCESSING, COMPLETED, or FAILED by timeout/error)
     return NextResponse.json(job);
+
   } catch (error) {
     console.error('Error getting render job status:', error);
     return NextResponse.json(
