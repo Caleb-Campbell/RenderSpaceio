@@ -141,7 +141,6 @@ export async function generateRender(params: RenderParams): Promise<RenderResult
       prompt: prompt,
       n: 1, 
       size: "1024x1024" as const, // Specify desired size using 'as const' for literal type
-      response_format: 'b64_json' as const // Explicitly request base64
     };
     console.log("Calling OpenAI images.edit API with params:", { ...apiParams, image: `[File object for ${params.inputImagePath}]` }); // Log params without image data
 
