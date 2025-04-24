@@ -1,5 +1,6 @@
-import { createRenderJob } from '@/lib/render'; // Removed processRenderJob
-import { renderQueue } from '@/lib/queue'; // Added renderQueue
+import { createRenderJob } from '@/lib/render';
+import { renderQueue } from '@/lib/queue';
+import { JobsOptions } from 'bullmq'; // Import JobsOptions type
 import { NextRequest, NextResponse } from 'next/server';
 import { getSessionTeam, getSessionUser } from '@/lib/auth/session';
 
@@ -36,9 +37,21 @@ export async function POST(request: NextRequest) {
       inputImageUrl,
     });
 
-    // Enqueue the job for background processing
-    await renderQueue.add('renderJob', { jobId: job.id });
-    console.log(`Enqueued job ${job.id} for processing.`);
+    // Define job options with explicit type
+    const jobOptions: JobsOptions = {
+        timeout: 300000, // 5 minutes in milliseconds
+        attempts: 2,     // Allow 1 retry if the job fails
+        removeOnComplete: true, // Keep queue clean
+        removeOnFail: { count: 100 } // Keep last 100 failed jobs
+    } as JobsOptions; // Use type assertion
+
+    // Enqueue the job for background processing with options
+    await renderQueue.add(
+      'renderJob',   // Job name
+      { jobId: job.id }, // Job data
+      jobOptions     // Pass the defined options object
+    );
+    console.log(`Enqueued job ${job.id} with timeout and retry options.`);
 
     // Return the job ID immediately
     return NextResponse.json({
