@@ -2,8 +2,10 @@ import { Queue, Worker, Job } from 'bullmq';
 import IORedis from 'ioredis';
 import { executeRenderPipeline } from '../render'; // We will create this function later
 
-// TODO: Load Redis URL from environment variable (process.env.REDIS_URL)
-const connection = new IORedis('redis://localhost:6379', {
+// Use the environment variable, fallback to localhost only if not set
+const redisUrl = process.env.REDIS_URL || 'redis://localhost:6379';
+
+const connection = new IORedis(redisUrl, {
   maxRetriesPerRequest: null, // Important for BullMQ
 });
 
