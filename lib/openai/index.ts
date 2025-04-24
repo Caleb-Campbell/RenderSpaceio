@@ -46,13 +46,6 @@ async function uploadBufferToUploadThing(imageBuffer: Buffer, filename: string):
 
     console.log(`Uploading image buffer: ${imageBuffer.length} bytes as ${filename}`);
 
-    // Save the file locally as a fallback/debug measure
-    const publicDir = path.join(process.cwd(), 'public/uploads');
-    await fs.mkdir(publicDir, { recursive: true }); // Use async mkdir
-    const localFilePath = path.join(publicDir, filename);
-    await fs.writeFile(localFilePath, imageBuffer); // Use async writeFile
-    console.log(`Saved fallback file locally to: ${localFilePath}`);
-
     // Attempt UploadThing upload
     try {
       console.log("Attempting UploadThing upload with buffer...");
@@ -72,10 +65,8 @@ async function uploadBufferToUploadThing(imageBuffer: Buffer, filename: string):
       return uploadResult.data.url;
     } catch (utError) {
       console.error("UploadThing upload failed:", utError);
-      // Return the local file path as fallback
-      const fallbackUrl = `/uploads/${filename}`;
-      console.log(`Using fallback local URL: ${fallbackUrl}`);
-      return fallbackUrl;
+      // Throw the error instead of returning a local fallback
+      throw utError;
     }
   } catch (error) {
     console.error('Error in uploadBufferToUploadThing:', error);
