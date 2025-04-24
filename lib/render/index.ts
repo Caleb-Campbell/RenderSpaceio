@@ -373,6 +373,25 @@ export async function executeRenderPipeline(job: Job<RenderJobData>): Promise<{ 
 }
 
 /**
+ * Get render jobs for a team
+ */
+export async function getRenderJobs(teamId: number) {
+  return db.query.renderJobs.findMany({
+    where: eq(renderJobs.teamId, teamId),
+    orderBy: (jobs, { desc }) => [desc(jobs.createdAt)],
+  });
+}
+
+/**
+ * Get a specific render job
+ */
+export async function getRenderJob(jobId: string) { // Changed jobId type to string
+  return db.query.renderJobs.findFirst({
+    where: eq(renderJobs.id, jobId), // Drizzle should handle string UUID comparison
+  });
+}
+
+/**
  * Add credits to a team
  */
 export async function addCredits({
