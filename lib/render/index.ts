@@ -1,8 +1,27 @@
 import { db } from '@/lib/db/drizzle';
 import { renderJobs, creditTransactions, teams, RenderStatus, ActivityType } from '@/lib/db/schema';
 import { generateRender, type RenderResult } from '@/lib/openai';
-import { eq, and } from 'drizzle-orm';
+import { eq, and, sql } from 'drizzle-orm'; // Import sql
 import { logActivity } from '@/lib/db/queries';
+
+/**
+ * Helper function to append messages to the debugLog field of a render job.
+ */
+async function appendDebugLog(jobId: string, message: string) {
+  const timestamp = new Date().toISOString();
+  const logEntry = `${timestamp}: ${message}\n`;
+  try {
+    // Use sql.raw to concatenate strings in PostgreSQL
+    await db.update(renderJobs)
+      .set({ 
+        debugLog: sql`${renderJobs.debugLog} || ${logEntry}` 
+      })
+      .where(eq(renderJobs.id, jobId));
+  } catch (error) {
+    // Log error to console if DB update fails, but don't crash the main process
+    console.error(`DB_LOG_ERROR: Failed to append debug log for job ${jobId}:`, error);
+  }
+}
 
 /**
  * Create a new render job (without deducting credits until job is successful)
@@ -62,21 +81,22 @@ export async function createRenderJob({
  * Process a render job
  */
 export async function processRenderJob(job: { id: string }) { // Changed id type to string
-  console.log(`PROCESS_JOB: Starting processing for job ${job.id}`); // Moved this log to the very top
+  await appendDebugLog(job.id, `Starting processing.`); // Use DB log
   // Get the render job
-  console.log(`PROCESS_JOB: Fetching job ${job.id} details from DB...`);
+  await appendDebugLog(job.id, `Fetching job details from DB...`); // Use DB log
   const renderJob = await db.query.renderJobs.findFirst({
     where: eq(renderJobs.id, job.id), // Drizzle should handle string UUID comparison
   });
 
   if (!renderJob) {
-    console.error(`PROCESS_JOB: Job ${job.id} not found in DB.`);
+    // Log to console here as we can't update the job if it's not found
+    console.error(`PROCESS_JOB_ERROR: Job ${job.id} not found in DB.`); 
     throw new Error('Render job not found');
   }
-  console.log(`PROCESS_JOB: Found job ${job.id}. Current status: ${renderJob.status}`);
+  await appendDebugLog(job.id, `Found job. Current status: ${renderJob.status}`); // Use DB log
 
   if (renderJob.status !== RenderStatus.PENDING) {
-    console.warn(`PROCESS_JOB: Job ${job.id} is not PENDING (status: ${renderJob.status}). Aborting processing.`);
+    await appendDebugLog(job.id, `Job is not PENDING (status: ${renderJob.status}). Aborting processing.`); // Use DB log
     // Don't throw an error here, just return, as the status endpoint might trigger this multiple times.
     return; 
     // throw new Error(`Job is already in ${renderJob.status} state`); // Original line - changed to return
@@ -86,16 +106,16 @@ export async function processRenderJob(job: { id: string }) { // Changed id type
   let renderResult: RenderResult | undefined;
   
   try {
-    console.log(`PROCESS_JOB: Updating job ${job.id} status to PROCESSING in DB...`);
+    await appendDebugLog(job.id, `Updating job status to PROCESSING in DB...`); // Use DB log
     // Update job status to processing
     await db
       .update(renderJobs)
       .set({ status: RenderStatus.PROCESSING }) // Removed updatedAt: new Date()
       .where(eq(renderJobs.id, job.id));
-    console.log(`PROCESS_JOB: Job ${job.id} status updated to PROCESSING.`);
+    await appendDebugLog(job.id, `Job status updated to PROCESSING.`); // Use DB log
 
     // Call OpenAI to generate the render
-    console.log(`PROCESS_JOB: Calling generateRender for job ${job.id} (User: ${renderJob.userId}). Input: ${renderJob.inputImagePath}`);
+    await appendDebugLog(job.id, `Calling generateRender (User: ${renderJob.userId}). Input: ${renderJob.inputImagePath}`); // Use DB log
     
     renderResult = await generateRender({
       inputImagePath: renderJob.inputImagePath, // Renamed from collageImagePath
@@ -103,39 +123,39 @@ export async function processRenderJob(job: { id: string }) { // Changed id type
       lighting: renderJob.lighting,
       userId: renderJob.userId.toString(),
     });
-    console.log(`PROCESS_JOB: generateRender returned for job ${job.id}. Success: ${renderResult.success}`);
+    await appendDebugLog(job.id, `generateRender returned. Success: ${renderResult.success}`); // Use DB log
 
     // Use generatedImageUrl for logging
     // Log more details from the result
-    console.log(`PROCESS_JOB: Render result details for ${job.id}: success=${renderResult.success}, generatedImageUrl=${renderResult.generatedImageUrl?.substring(0, 50)}..., prompt=${renderResult.prompt?.substring(0,50)}..., error=${renderResult.error}, uploadError=${renderResult.uploadError}`);
+    await appendDebugLog(job.id, `Render result details: success=${renderResult.success}, generatedImageUrl=${renderResult.generatedImageUrl?.substring(0, 50)}..., prompt=${renderResult.prompt?.substring(0,50)}..., error=${renderResult.error}, uploadError=${renderResult.uploadError}`); // Use DB log
 
     if (!renderResult.success) {
       // Log full error details
-      console.error(`PROCESS_JOB: generateRender failed for job ${job.id}. Error:`, renderResult.error);
+      await appendDebugLog(job.id, `generateRender failed. Error: ${renderResult.error}`); // Use DB log
       // Throw the error to be caught by the main catch block, which updates the status to FAILED
       throw new Error(renderResult.error || 'Failed to generate render');
     }
     
     // If there's an uploadError but we still have an image URL, log but continue
     if (renderResult.uploadError) {
-      console.warn(`PROCESS_JOB: UploadThing error occurred for job ${job.id}, but continuing as image URL exists. Error:`, renderResult.uploadError);
+      await appendDebugLog(job.id, `UploadThing error occurred, but continuing as image URL exists. Error: ${renderResult.uploadError}`); // Use DB log
     }
 
-    console.log(`PROCESS_JOB: Render successful for job ${job.id}. Proceeding with credit deduction and final update.`);
+    await appendDebugLog(job.id, `Render successful. Proceeding with credit deduction and final update.`); // Use DB log
     // Get the team to deduct credits
-    console.log(`PROCESS_JOB: Fetching team data for team ${renderJob.teamId}...`);
+    await appendDebugLog(job.id, `Fetching team data for team ${renderJob.teamId}...`); // Use DB log
     const teamData = await db.query.teams.findFirst({
       where: eq(teams.id, renderJob.teamId),
     });
 
     if (!teamData) {
-      console.error(`PROCESS_JOB: Team ${renderJob.teamId} not found for job ${job.id}.`);
+      await appendDebugLog(job.id, `Team ${renderJob.teamId} not found.`); // Use DB log
       throw new Error('Team not found');
     }
-    console.log(`PROCESS_JOB: Found team ${renderJob.teamId}. Current credits: ${teamData.credits}`);
+    await appendDebugLog(job.id, `Found team ${renderJob.teamId}. Current credits: ${teamData.credits}`); // Use DB log
 
     if (teamData.credits < 1) {
-      console.error(`PROCESS_JOB: Insufficient credits for team ${renderJob.teamId} (needs 1, has ${teamData.credits}) for job ${job.id}.`);
+      await appendDebugLog(job.id, `Insufficient credits (needs 1, has ${teamData.credits}).`); // Use DB log
       // This case should ideally be prevented by the initial check in createRenderJob, but double-check here.
       // Mark job as failed due to credits issue *after* successful render.
       throw new Error('Not enough credits to complete this render (checked after generation)'); 
@@ -143,14 +163,14 @@ export async function processRenderJob(job: { id: string }) { // Changed id type
 
     // Make sure renderResult and generatedImageUrl are defined (already checked success, but belt-and-suspenders)
     if (!renderResult.generatedImageUrl) {
-       console.error(`PROCESS_JOB: Render marked successful for job ${job.id}, but generatedImageUrl is missing!`);
+       await appendDebugLog(job.id, `Render marked successful, but generatedImageUrl is missing!`); // Use DB log
       throw new Error('Render result is missing generatedImageUrl despite success flag');
     }
-    console.log(`PROCESS_JOB: Starting DB transaction for job ${job.id} completion...`);
+    await appendDebugLog(job.id, `Starting DB transaction for job completion...`); // Use DB log
 
     // Deduct credits and update job in a transaction
     await db.transaction(async (tx) => {
-      console.log(`PROCESS_JOB: [TX ${job.id}] Deducting 1 credit from team ${renderJob.teamId}...`);
+      await appendDebugLog(job.id, `[TX] Deducting 1 credit from team ${renderJob.teamId}...`); // Use DB log
       // Deduct 1 credit from the team
       await tx
         .update(teams)
@@ -159,10 +179,10 @@ export async function processRenderJob(job: { id: string }) { // Changed id type
           updatedAt: new Date(),
         })
         .where(eq(teams.id, renderJob.teamId));
-      console.log(`PROCESS_JOB: [TX ${job.id}] Credit deducted.`);
+      await appendDebugLog(job.id, `[TX] Credit deducted.`); // Use DB log
 
       // Create credit transaction record
-      console.log(`PROCESS_JOB: [TX ${job.id}] Creating credit transaction record...`);
+      await appendDebugLog(job.id, `[TX] Creating credit transaction record...`); // Use DB log
       await tx.insert(creditTransactions).values({
         teamId: renderJob.teamId,
         userId: renderJob.userId,
@@ -171,10 +191,10 @@ export async function processRenderJob(job: { id: string }) { // Changed id type
         balanceAfter: teamData.credits - 1,
         renderJobId: renderJob.id,
       });
-      console.log(`PROCESS_JOB: [TX ${job.id}] Credit transaction record created.`);
+      await appendDebugLog(job.id, `[TX] Credit transaction record created.`); // Use DB log
 
       // Update job with the result
-      console.log(`PROCESS_JOB: [TX ${job.id}] Updating render job status to COMPLETED...`);
+      await appendDebugLog(job.id, `[TX] Updating render job status to COMPLETED...`); // Use DB log
       await tx
         .update(renderJobs)
         .set({
@@ -184,14 +204,16 @@ export async function processRenderJob(job: { id: string }) { // Changed id type
           prompt: renderResult!.prompt || '',
           completedAt: new Date(),
           creditDeducted: true, // Flag to indicate credit was deducted
+          // Clear debug log on success? Optional. Keep it for now.
+          // debugLog: sql`''` // Reset debug log on success
         })
         .where(eq(renderJobs.id, job.id));
-      console.log(`PROCESS_JOB: [TX ${job.id}] Render job status updated.`);
+      await appendDebugLog(job.id, `[TX] Render job status updated.`); // Use DB log
     });
-    console.log(`PROCESS_JOB: DB transaction for job ${job.id} completed successfully.`);
+    await appendDebugLog(job.id, `DB transaction completed successfully.`); // Use DB log
 
-    // Log completion activity
-    console.log(`PROCESS_JOB: Logging completion activity for job ${job.id}...`);
+    // Log completion activity (Keep console log for this system-level activity)
+    console.log(`PROCESS_JOB: Logging completion activity for job ${job.id}...`); 
     await logActivity({
       teamId: renderJob.teamId,
       userId: renderJob.userId,
@@ -200,7 +222,7 @@ export async function processRenderJob(job: { id: string }) { // Changed id type
     });
     console.log(`PROCESS_JOB: Completion activity logged for job ${job.id}.`);
 
-    console.log(`PROCESS_JOB: Job ${job.id} processed successfully. Returning result.`);
+    await appendDebugLog(job.id, `Job processed successfully. Returning result.`); // Use DB log
     return {
       success: true,
       jobId: job.id,
@@ -209,15 +231,17 @@ export async function processRenderJob(job: { id: string }) { // Changed id type
     };
   } catch (error) {
     const errorMessage = error instanceof Error ? error.message : 'Unknown error';
-    console.error(`PROCESS_JOB: Error caught during processing of job ${job.id}. Error: ${errorMessage}`, error);
+    // Log error to both console and DB
+    console.error(`PROCESS_JOB_ERROR: Error caught during processing of job ${job.id}. Error: ${errorMessage}`, error);
+    await appendDebugLog(job.id, `ERROR caught: ${errorMessage}`); // Use DB log
     
     // If we get an error related to UploadThing but have a gpt-image-1 image, still mark as success
     // Check for generatedImageUrl in fallback logic
     if (errorMessage.includes('UploadThing') && renderResult?.generatedImageUrl) { 
-      console.warn(`PROCESS_JOB: Handling UploadThing error for job ${job.id} as non-fatal because image URL exists.`);
+      await appendDebugLog(job.id, `Handling UploadThing error as non-fatal because image URL exists.`); // Use DB log
       
       // Update job as completed anyway, using the generated image URL
-      console.log(`PROCESS_JOB: Updating job ${job.id} status to COMPLETED despite UploadThing error...`);
+      await appendDebugLog(job.id, `Updating job status to COMPLETED despite UploadThing error...`); // Use DB log
       await db
         .update(renderJobs)
         .set({
@@ -227,9 +251,11 @@ export async function processRenderJob(job: { id: string }) { // Changed id type
           prompt: renderResult.prompt || '',
           completedAt: new Date(),
           errorMessage: `Warning: ${errorMessage} (But image was generated successfully)`,
+          // Append final status to debug log
+          debugLog: sql`${renderJobs.debugLog} || ${new Date().toISOString()}: Marked COMPLETED with warning.\n`
         })
         .where(eq(renderJobs.id, job.id));
-      console.log(`PROCESS_JOB: Job ${job.id} marked as COMPLETED with warning.`);
+      await appendDebugLog(job.id, `Job marked as COMPLETED with warning.`); // Use DB log
         
       // Still return success because the core render worked
       return {
@@ -241,22 +267,24 @@ export async function processRenderJob(job: { id: string }) { // Changed id type
     }
     
     // Otherwise update job with error
-    console.error(`PROCESS_JOB: Marking job ${job.id} as FAILED due to error: ${errorMessage}`);
+    await appendDebugLog(job.id, `Marking job as FAILED due to error: ${errorMessage}`); // Use DB log
     await db
       .update(renderJobs)
       .set({
         status: RenderStatus.FAILED,
         errorMessage: errorMessage,
         completedAt: new Date(), // Mark completion time even for failures
+        // Append final status to debug log
+        debugLog: sql`${renderJobs.debugLog} || ${new Date().toISOString()}: Marked FAILED.\n`
       })
       .where(eq(renderJobs.id, job.id));
-    console.log(`PROCESS_JOB: Job ${job.id} status updated to FAILED in DB.`);
+    await appendDebugLog(job.id, `Job status updated to FAILED in DB.`); // Use DB log
 
     // Re-throw the error so the caller knows something went wrong, 
     // but the job status is already updated.
     // The status endpoint trigger doesn't need to catch this.
     // throw error; // Don't re-throw, let the function complete. The status is updated.
-    console.log(`PROCESS_JOB: Exiting processRenderJob for ${job.id} after handling error.`);
+    await appendDebugLog(job.id, `Exiting processRenderJob after handling error.`); // Use DB log
     // Return a failure indicator if needed, though the status update is the main thing
     return { success: false, jobId: job.id, error: errorMessage };
   }

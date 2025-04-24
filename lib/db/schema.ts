@@ -94,6 +94,7 @@ export const renderJobs = pgTable('render_jobs', {
   completedAt: timestamp('completed_at'),
   errorMessage: text('error_message'),
   creditDeducted: boolean('credit_deducted').notNull().default(false),
+  debugLog: text('debug_log').default(''), // Add new field for debug logging
 });
 
 export const creditTransactions = pgTable('credit_transactions', {
