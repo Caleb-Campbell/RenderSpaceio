@@ -1,9 +1,9 @@
 'use client';
 
 import Link from 'next/link';
-import { use, useState, Suspense } from 'react';
+import { use, useState, Suspense, useEffect, useRef } from 'react'; // Added useEffect, useRef
 import { Button } from '@/components/ui/button';
-import { CircleIcon, Home, LogOut, MessageSquareQuoteIcon } from 'lucide-react';
+import { CircleIcon, Home, LogOut, MessageSquareQuoteIcon, CheckCircle, XCircle, ExternalLink } from 'lucide-react'; // Added icons for toast
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -16,6 +16,7 @@ import { signOut } from '@/app/(login)/actions';
 import { useRouter } from 'next/navigation';
 import Image from 'next/image';
 import { usePostHog } from 'posthog-js/react';
+import toast from 'react-hot-toast'; // Added toast import
 
 function UserMenu() {
   const [isMenuOpen, setIsMenuOpen] = useState(false);
@@ -134,8 +135,127 @@ function SupportButton() {
   );
 }
 
+// Define the expected structure of the SSE message data
+interface RenderEventData {
+  jobId: string;
+  title: string;
+  status: 'COMPLETED' | 'FAILED';
+  resultImageUrl?: string;
+  errorMessage?: string;
+}
 
 export default function Layout({ children }: { children: React.ReactNode }) {
+  const eventSourceRef = useRef<EventSource | null>(null);
+  const { userPromise } = useUser(); // Get user promise to check auth status
+  const user = use(userPromise); // Resolve user promise
+
+  useEffect(() => {
+    // Only establish SSE connection if the user is logged in
+    if (!user) {
+      console.log('SSE: User not logged in, skipping connection.');
+      return;
+    }
+
+    console.log('SSE: Attempting to establish connection...');
+    // Ensure only one connection is active
+    if (eventSourceRef.current) {
+      console.log('SSE: Connection already exists, skipping.');
+      return;
+    }
+
+    const eventSource = new EventSource('/api/render/events');
+    eventSourceRef.current = eventSource;
+
+    eventSource.onopen = () => {
+      console.log('SSE: Connection opened successfully.');
+    };
+
+    eventSource.onerror = (error) => {
+      console.error('SSE: Connection error:', error);
+      // Optionally show a persistent error toast or attempt reconnection logic
+      // toast.error('Real-time connection lost. Please refresh.', { id: 'sse-error' });
+      eventSource.close(); // Close on error to prevent constant retries by browser
+      eventSourceRef.current = null;
+    };
+
+    eventSource.addEventListener('message', (event) => {
+      console.log('SSE: Message received:', event.data);
+      try {
+        const messageData = JSON.parse(event.data) as { event: string; data: RenderEventData };
+
+        if (messageData.event === 'render.completed') {
+          const { jobId, title, resultImageUrl } = messageData.data;
+          toast.custom(
+            (t) => (
+              <div
+                className={`${
+                  t.visible ? 'animate-enter' : 'animate-leave'
+                } max-w-md w-full bg-white shadow-lg rounded-lg pointer-events-auto flex ring-1 ring-black ring-opacity-5`}
+              >
+                <div className="flex-1 w-0 p-4">
+                  <div className="flex items-start">
+                    <div className="flex-shrink-0 pt-0.5 text-green-500">
+                      <CheckCircle className="h-6 w-6" />
+                    </div>
+                    <div className="ml-3 flex-1">
+                      <p className="text-sm font-medium text-gray-900">
+                        Render Complete!
+                      </p>
+                      <p className="mt-1 text-sm text-gray-500 truncate">
+                        "{title}" is ready.
+                      </p>
+                      {resultImageUrl && (
+                         <div className="mt-2">
+                            <Link href={`/dashboard/result/${jobId}`} passHref legacyBehavior>
+                              <a
+                                onClick={() => toast.dismiss(t.id)}
+                                className="inline-flex items-center px-3 py-1 border border-transparent text-xs font-medium rounded shadow-sm text-white bg-orange-500 hover:bg-orange-600 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-orange-500"
+                              >
+                                View Result <ExternalLink className="ml-1 h-3 w-3" />
+                              </a>
+                            </Link>
+                         </div>
+                      )}
+                    </div>
+                  </div>
+                </div>
+                <div className="flex border-l border-gray-200">
+                  <button
+                    onClick={() => toast.dismiss(t.id)}
+                    className="w-full border border-transparent rounded-none rounded-r-lg p-4 flex items-center justify-center text-sm font-medium text-orange-600 hover:text-orange-500 focus:outline-none focus:ring-2 focus:ring-orange-500"
+                  >
+                    Close
+                  </button>
+                </div>
+              </div>
+            ),
+            { duration: 10000 } // Keep toast longer
+          );
+        } else if (messageData.event === 'render.failed') {
+          const { title, errorMessage } = messageData.data;
+           toast.error(
+             `Render failed for "${title}". ${errorMessage ? `Reason: ${errorMessage}` : ''}`,
+             {
+               icon: <XCircle className="h-6 w-6 text-red-500" />,
+               duration: 8000, // Keep error toast longer
+             }
+           );
+        }
+      } catch (error) {
+        console.error('SSE: Failed to parse message data:', error);
+      }
+    });
+
+    // Cleanup function to close connection when component unmounts or user logs out
+    return () => {
+      if (eventSourceRef.current) {
+        console.log('SSE: Closing connection.');
+        eventSourceRef.current.close();
+        eventSourceRef.current = null;
+      }
+    };
+  }, [user]); // Re-run effect if user auth state changes
+
   return (
     <section className="flex flex-col min-h-screen relative">
       <Header />

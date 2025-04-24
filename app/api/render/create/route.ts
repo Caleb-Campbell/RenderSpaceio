@@ -1,6 +1,7 @@
-import { getSessionUser, getSessionTeam } from '@/lib/auth/session';
-import { createRenderJob, processRenderJob } from '@/lib/render';
+import { createRenderJob } from '@/lib/render'; // Removed processRenderJob
+import { renderQueue } from '@/lib/queue'; // Added renderQueue
 import { NextRequest, NextResponse } from 'next/server';
+import { getSessionTeam, getSessionUser } from '@/lib/auth/session';
 
 export async function POST(request: NextRequest) {
   try {
@@ -35,12 +36,11 @@ export async function POST(request: NextRequest) {
       inputImageUrl,
     });
 
-    // Start processing the job
-    processRenderJob(job).catch(error => {
-      console.error('Error processing render job:', error);
-    });
+    // Enqueue the job for background processing
+    await renderQueue.add('renderJob', { jobId: job.id });
+    console.log(`Enqueued job ${job.id} for processing.`);
 
-    // Return the job ID
+    // Return the job ID immediately
     return NextResponse.json({
       success: true,
       jobId: job.id,

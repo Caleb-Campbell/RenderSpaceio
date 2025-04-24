@@ -7,6 +7,7 @@ import { NextSSRPlugin } from '@uploadthing/react/next-ssr-plugin';
 import { extractRouterConfig } from 'uploadthing/server';
 import { uploadRouter } from '@/lib/uploadthing';
 import { PostHogProvider } from '@/components/PostHogProvider';
+import { Toaster } from 'react-hot-toast'; // Added Toaster import
 
 export const metadata: Metadata = {
   title: 'RenderSpace - AI Interior Design Visualization',
@@ -43,6 +44,7 @@ export default function RootLayout({
         <PostHogProvider>
           <UserProvider userPromise={userPromise}>
             {children}
+            <Toaster position="bottom-right" /> {/* Added Toaster component */}
           </UserProvider>
         </PostHogProvider>
       </body>

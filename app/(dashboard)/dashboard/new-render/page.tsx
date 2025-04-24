@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
+import { Input } from '@/components/ui/input'; // Added Input
 import { Label } from '@/components/ui/label';
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
 import { Loader2, AlertCircle } from 'lucide-react';
@@ -21,9 +22,19 @@ const roomTypes = [
   { id: 'dining_room', label: 'Dining Room' },
 ];
 
+// Lighting options (can be expanded)
+const lightingOptions = [
+  { id: 'bright', label: 'Bright' },
+  { id: 'moody', label: 'Moody' },
+  { id: 'warm', label: 'Warm' },
+  // Add more if needed
+];
+
 export default function NewRenderPage() {
   const [uploadedImageUrl, setUploadedImageUrl] = useState<string | null>(null);
+  const [title, setTitle] = useState<string>(''); // Added title state
   const [roomType, setRoomType] = useState<string>('living_room');
+  const [lighting, setLighting] = useState<string>('bright'); // Added lighting state
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isUploading, setIsUploading] = useState(false);
   const [teamCredits, setTeamCredits] = useState<number | null>(null);
@@ -77,41 +88,56 @@ export default function NewRenderPage() {
     e.preventDefault();
     
     if (!uploadedImageUrl) {
-      alert('Please upload a collage image');
+      alert('Please upload a design collage image first.');
+      return;
+    }
+    if (!title.trim()) {
+      alert('Please enter a title for your render.');
       return;
     }
     
     setIsSubmitting(true);
     
     try {
-      // Store the image URL in session storage to pass to the next page
-      console.log("Storing image URL in session storage:", uploadedImageUrl);
+      console.log("Submitting render request:", { title, roomType, lighting, uploadedImageUrl });
       
+      const response = await fetch('/api/render/create', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          title: title.trim(),
+          roomType,
+          lighting,
+          inputImageUrl: uploadedImageUrl,
+        }),
+      });
+
+      const result = await response.json();
+
+      if (!response.ok) {
+        console.error("API Error Response:", result);
+        throw new Error(result.error || `Failed to create render job (HTTP ${response.status})`);
+      }
+
+      console.log("Render job created successfully:", result.jobId);
+      
+      // Set flag and jobId in session storage before redirecting
       if (typeof window !== 'undefined') {
-        // First clear any existing value to ensure we're not using stale data
-        sessionStorage.removeItem('collageImageUrl');
-        
-        // Then set the new value
-        sessionStorage.setItem('collageImageUrl', uploadedImageUrl);
-        
-        // Verify it was set correctly
-        const storedUrl = sessionStorage.getItem('collageImageUrl');
-        console.log("Verified stored URL:", storedUrl);
-        
-        if (!storedUrl) {
-          throw new Error("Failed to store image URL in session storage");
-        }
+        sessionStorage.setItem('newRenderSubmitted', 'true');
+        sessionStorage.setItem('newlySubmittedJobId', result.jobId); // Store the jobId
       }
       
-      // Use a timeout to ensure session storage has time to update
-      setTimeout(() => {
-        // Navigate to customization page with both roomType and imageUrl (as fallback)
-        router.push(`/dashboard/customize?roomType=${roomType}&imageUrl=${encodeURIComponent(uploadedImageUrl)}`);
-      }, 100);
+      // Redirect to gallery immediately after successful submission
+      router.push('/dashboard/gallery');
+      
+      // No need to setIsSubmitting(false) as we are navigating away
+
     } catch (error) {
-      console.error('Error saving image data:', error);
-      alert('There was a problem saving your upload data. Please try again.');
-      setIsSubmitting(false);
+      console.error('Error creating render job:', error);
+      alert(`Failed to start render: ${error instanceof Error ? error.message : 'Unknown error'}`);
+      setIsSubmitting(false); // Only set back to false on error
     }
   };
 
@@ -200,6 +226,27 @@ export default function NewRenderPage() {
                 onUploadComplete={handleUploadComplete}
                 onUploadError={handleUploadError}
               />
+              {isUploading && (
+                <div className="flex items-center text-sm text-gray-500">
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  Uploading...
+                </div>
+              )}
+              {uploadedImageUrl && !isUploading && (
+                 <p className="text-sm text-green-600">Upload complete!</p>
+              )}
+            </div>
+
+            {/* Title Input */}
+            <div className="space-y-2">
+              <Label htmlFor="title">Render Title</Label>
+              <Input 
+                id="title" 
+                value={title} 
+                onChange={(e) => setTitle(e.target.value)} 
+                placeholder="e.g., Cozy Living Room Concept"
+                required 
+              />
             </div>
             
             {/* Room Type Selection */}
@@ -212,8 +259,25 @@ export default function NewRenderPage() {
               >
                 {roomTypes.map((room) => (
                   <div key={room.id} className="flex items-center space-x-2">
-                    <RadioGroupItem value={room.id} id={room.id} />
-                    <Label htmlFor={room.id}>{room.label}</Label>
+                    <RadioGroupItem value={room.id} id={`room-${room.id}`} />
+                    <Label htmlFor={`room-${room.id}`}>{room.label}</Label>
+                  </div>
+                ))}
+              </RadioGroup>
+            </div>
+
+            {/* Lighting Selection */}
+            <div className="space-y-2">
+              <Label>Lighting Style</Label>
+              <RadioGroup 
+                value={lighting} 
+                onValueChange={setLighting}
+                className="grid grid-cols-2 gap-4 sm:grid-cols-3"
+              >
+                {lightingOptions.map((light) => (
+                  <div key={light.id} className="flex items-center space-x-2">
+                    <RadioGroupItem value={light.id} id={`light-${light.id}`} />
+                    <Label htmlFor={`light-${light.id}`}>{light.label}</Label>
                   </div>
                 ))}
               </RadioGroup>
@@ -231,10 +295,10 @@ export default function NewRenderPage() {
               {isSubmitting ? (
                 <>
                   <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                  Processing...
+                  Submitting...
                 </>
               ) : (
-                'Continue to Customization'
+                'Start Render' // Changed button text
               )}
             </Button>
           </CardFooter>

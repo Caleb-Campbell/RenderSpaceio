@@ -86,11 +86,11 @@ export const renderJobs = pgTable('render_jobs', {
   title: varchar('title', { length: 100 }).notNull(),
   roomType: varchar('room_type', { length: 50 }).notNull(),
   lighting: varchar('lighting', { length: 50 }).notNull(),
-  status: varchar('status', { length: 20 }).notNull().default('pending'), // pending, processing, completed, failed
+  status: varchar('status', { length: 20 }).notNull().default('pending'), // pending, processing, uploading, completed, failed
   inputImagePath: text('input_image_path').notNull(), // Renamed from collageImagePath
   resultImagePath: text('result_image_path'),
   prompt: text('prompt'),
-  createdAt: timestamp('created_at').notNull().defaultNow(),
+  createdAt: timestamp('created_at').notNull(), // Removed .defaultNow()
   completedAt: timestamp('completed_at'),
   errorMessage: text('error_message'),
   creditDeducted: boolean('credit_deducted').notNull().default(false),
@@ -236,6 +236,7 @@ export enum ActivityType {
 export enum RenderStatus {
   PENDING = 'pending',
   PROCESSING = 'processing',
+  UPLOADING = 'uploading', // Added uploading status
   COMPLETED = 'completed',
   FAILED = 'failed',
 }

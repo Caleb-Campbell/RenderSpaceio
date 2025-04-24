@@ -1,7 +1,7 @@
 import { db } from '@/lib/db/drizzle'; // Import db
 import { renderJobs, RenderStatus } from '@/lib/db/schema'; // Import renderJobs schema and RenderStatus enum
 import { eq } from 'drizzle-orm'; // Import eq operator
-import { getRenderJob, processRenderJob } from '@/lib/render';
+import { getRenderJob } from '@/lib/render'; // Removed processRenderJob import
 import { NextRequest, NextResponse } from 'next/server';
 import { getSessionUser } from '@/lib/auth/session';
 // RenderStatus is already imported from schema
@@ -94,30 +94,8 @@ export async function GET(request: NextRequest) {
       console.log(`API: Job ${jobId} not timed out.`);
     }
 
-    // If job is pending, try to trigger processing (original logic)
-    console.log(`API: Checking if job ${jobId} is PENDING and needs processing trigger...`);
-    if (job.status === RenderStatus.PENDING) {
-      const jobCreatedAt = new Date(job.createdAt);
-      const timeDiffSeconds = (now.getTime() - jobCreatedAt.getTime()) / 1000;
-      console.log(`API: Job ${jobId} is PENDING. Time since creation: ${timeDiffSeconds} seconds.`);
-      if (timeDiffSeconds > 5) {
-        console.log(`API: Triggering background processing for pending job ${job.id}...`);
-        // Process the job in the background - fire and forget
-        // Ensure processRenderJob updates 'updatedAt' when it sets status to PROCESSING
-        processRenderJob(job).catch(error => {
-          // Log errors during the *triggering* of the process, not the process itself
-          // Add more detailed logging here
-          const errorMessage = error instanceof Error ? error.message : 'Unknown error during trigger';
-          console.error(`API: CATCH BLOCK - Error occurred while *triggering* background processing for job ${job.id}. Error: ${errorMessage}`, error);
-        });
-        // Return the current PENDING status, it will update on next poll
-        console.log(`API: Background processing triggered for ${job.id}. Returning current PENDING status.`);
-      } else {
-         console.log(`API: Job ${job.id} is PENDING but too recent to trigger processing yet.`);
-      }
-    } else {
-       console.log(`API: Job ${job.id} status is ${job.status}, no processing trigger needed.`);
-    }
+    // Removed the logic that attempted to re-trigger PENDING jobs from the status endpoint.
+    // The worker is now solely responsible for processing queued jobs.
 
     // Return the current job data (could be PENDING, PROCESSING, COMPLETED, or FAILED by timeout/error)
     console.log(`API: Returning current job data for ${job.id}. Status: ${job.status}`);

@@ -2,7 +2,7 @@ import OpenAI from 'openai';
 import fs from 'fs/promises'; // Use promises for async file reading
 import path from 'path'; // Import path module
 import fetch from 'node-fetch'; // Keep for potential fallbacks or other uses
-import { UTApi } from 'uploadthing/server';
+// Removed UTApi import
 import { Readable } from 'stream';
 
 // Initialize OpenAI client only if API key is available
@@ -13,8 +13,7 @@ const openai = process.env.OPENAI_API_KEY
     })
   : null;
 
-// Initialize the UploadThing API client
-const utapi = new UTApi();
+// Removed UTApi initialization
 
 // File types for UploadThing
 type FileWithPath = {
@@ -27,218 +26,124 @@ type RenderParams = {
   inputImagePath: string; // Renamed from collageImagePath
   roomType: string;
   lighting: string;
-  userId: string;
+  userId: string; // Keep userId if needed for context/logging within OpenAI call
 };
 
-/**
- * Saves a remote image to UploadThing
- * Saves an image buffer to UploadThing
- * @param imageBuffer The image data as a Buffer
- * @param filename The desired filename for the uploaded image
- * @returns The UploadThing URL for the saved image
- */
-async function uploadBufferToUploadThing(imageBuffer: Buffer, filename: string): Promise<string> {
-  try {
-    // For development without API keys, use a placeholder
-    if (process.env.NODE_ENV !== "production" && !process.env.UPLOADTHING_SECRET) {
-      console.log("UploadThing not configured in development, using placeholder");
-      return '/placeholder-render.jpg';
-    }
+// Define the result type for the OpenAI call
+export type OpenAIResult = {
+  success: boolean;
+  imageData?: string; // Base64 encoded image data
+  prompt?: string;
+  error?: string;
+};
 
-    console.log(`Uploading image buffer: ${imageBuffer.length} bytes as ${filename}`);
-
-    // Attempt UploadThing upload
-    try {
-      console.log("Attempting UploadThing upload with buffer...");
-      const blob = new Blob([imageBuffer], { type: 'image/png' });
-      const file = new File([blob], filename, { type: 'image/png' });
-      const uploadResult = await utapi.uploadFiles(file);
-
-      if (uploadResult.error) {
-        throw new Error(`UploadThing error: ${uploadResult.error.message}`); // Access error message
-      }
-
-      if (!uploadResult.data?.url) {
-        throw new Error('UploadThing did not return a URL.');
-      }
-
-      console.log("UploadThing success:", uploadResult.data.url);
-      return uploadResult.data.url;
-    } catch (utError) {
-      console.error("UploadThing upload failed:", utError);
-      // Throw the error instead of returning a local fallback
-     throw utError; // Re-throws the error
-    }
-  } catch (error) { // Outer catch
-    console.error('Error during upload buffer process:', error);
-    // Re-throw the error so the caller knows the upload failed
-    throw error;
-  }
-}
 
 /**
- * Generates an interior design visualization using OpenAI's new gpt-image-1 model
+ * Calls OpenAI to generate an interior design visualization using the images.edit endpoint.
  * @param params The parameters for the render request
- * @returns An object containing the render result or error
+ * @returns An object containing the OpenAI result (image data as base64) or error
  */
-export async function generateRender(params: RenderParams): Promise<RenderResult> {
+export async function callOpenAI(params: RenderParams): Promise<OpenAIResult> {
+  const { inputImagePath, roomType, lighting, userId } = params;
+  console.log(`[callOpenAI] Starting for user ${userId}. Input: ${inputImagePath}`);
+
   try {
     // Check if OpenAI is properly initialized
     if (!openai) {
-      console.warn('OpenAI API key not configured. Using mock response.');
+      console.warn('[callOpenAI] OpenAI API key not configured. Using mock response.');
       // Return mock response for development/build without API key
+      // Generate a placeholder base64 image for testing if needed, or return error/specific flag
       return {
-        success: true,
-        inputImageUrl: params.inputImagePath, // Use inputImagePath
-        generatedImageUrl: '/placeholder-render.jpg',
-        prompt: `Created a photorealistic interior design visualization of a ${params.roomType} with ${params.lighting} lighting, using the design elements from the uploaded collage.`,
+        success: false, // Indicate failure if not configured
+        error: 'OpenAI not configured',
+        prompt: `Mock prompt for ${roomType} with ${lighting} lighting.`,
       };
     }
-
-    // --- Use images.edit endpoint ---
 
     // 1. Get the input image buffer (fetch from URL or read from local path)
     let imageBuffer: Buffer;
     try {
-      const imagePath = params.inputImagePath; // Use inputImagePath
-      if (imagePath.startsWith('http://') || imagePath.startsWith('https://')) {
-        // Fetch image from URL
-        console.log(`Fetching input image from URL: ${imagePath}`);
-        const response = await fetch(imagePath);
-        if (!response.ok) {
-          throw new Error(`Failed to fetch image from ${imagePath}: ${response.statusText}`);
-        }
-        const arrayBuffer = await response.arrayBuffer();
-        imageBuffer = Buffer.from(arrayBuffer);
-        console.log(`Fetched input image: ${imageBuffer.length} bytes`);
+      if (inputImagePath.startsWith('http://') || inputImagePath.startsWith('https://')) {
+        console.log(`[callOpenAI] Fetching input image from URL: ${inputImagePath}`);
+        const response = await fetch(inputImagePath);
+        if (!response.ok) throw new Error(`Failed to fetch image: ${response.statusText}`);
+        imageBuffer = Buffer.from(await response.arrayBuffer());
       } else {
-        // Assume it's a local path (relative to project root)
-        const fullImagePath = path.join(process.cwd(), imagePath);
-        console.log(`Reading input image from local path: ${fullImagePath}`);
+        const fullImagePath = path.join(process.cwd(), inputImagePath);
+        console.log(`[callOpenAI] Reading input image from local path: ${fullImagePath}`);
         imageBuffer = await fs.readFile(fullImagePath);
-        console.log(`Read input image: ${imageBuffer.length} bytes`);
       }
+      console.log(`[callOpenAI] Input image buffer size: ${imageBuffer.length} bytes`);
     } catch (fetchOrReadError) {
-      console.error(`Error getting input image (${params.inputImagePath}):`, fetchOrReadError); // Use inputImagePath
-      throw new Error(`Failed to get input image: ${params.inputImagePath}`); // Use inputImagePath
+      console.error(`[callOpenAI] Error getting input image (${inputImagePath}):`, fetchOrReadError);
+      throw new Error(`Failed to get input image: ${inputImagePath}`);
     }
 
     // 2. Create the prompt for editing
-    const prompt = `Transform this collage image into a photorealistic interior design visualization of a ${params.roomType} with ${params.lighting} lighting. Maintain the key design elements, patterns, and style from the collage but render it as a realistic 3D scene.`;
-    
+    const prompt = `Transform this collage image into a photorealistic interior design visualization of a ${roomType} with ${lighting} lighting. Maintain the key design elements, patterns, and style from the collage but render it as a realistic 3D scene.`;
+    console.log(`[callOpenAI] Generated prompt: "${prompt.substring(0, 100)}..."`);
+
     // 3. Make the API call to OpenAI images.edit
-    let image_base64: string | undefined;
     const apiParams = {
-      model: "gpt-image-1", // Correct DALL-E 3 model name
+      model: "gpt-image-1",
       prompt: prompt,
       n: 1,
-      size: "1024x1024" as const, // Specify desired size using 'as const' for literal type
+      size: "1024x1024" as const,
     };
-    console.log("Calling OpenAI images.edit API with params:", { ...apiParams, image: `[File object for ${params.inputImagePath}]` }); // Log params without image data
+    console.log(`[callOpenAI] Calling OpenAI images.edit API...`);
 
-    // Add timestamped log before the call
-    console.log(`[${new Date().toISOString()}] Starting OpenAI images.edit call. Prompt: "${prompt.substring(0, 50)}...", Size: ${apiParams.size}`);
     try {
-      // The OpenAI SDK expects a File-like object (like the browser File API) or ReadStream.
-      // Create a File object from the buffer.
       const imageName = `input_collage_${Date.now()}.png`;
-      const imageBlob = new Blob([imageBuffer], { type: 'image/png' }); // Assuming PNG, adjust if needed
+      const imageBlob = new Blob([imageBuffer], { type: 'image/png' });
       const imageFile = new File([imageBlob], imageName, { type: 'image/png' });
 
-      console.log(`Sending imageFile: name=${imageFile.name}, size=${imageFile.size}, type=${imageFile.type}`);
+      console.log(`[callOpenAI] Sending imageFile: name=${imageFile.name}, size=${imageFile.size}, type=${imageFile.type}`);
+      const response = await openai.images.edit({ ...apiParams, image: imageFile });
+      console.log(`[callOpenAI] OpenAI images.edit call successful.`);
 
-      const response = await openai.images.edit({
-        ...apiParams, // Spread the defined parameters
-        image: imageFile, // Pass the created File object
-      });
-
-      // Add timestamped log after successful call
-      console.log(`[${new Date().toISOString()}] OpenAI images.edit call successful. Received b64_json (length: ${response.data[0]?.b64_json?.length})`);
-      console.log("Received OpenAI images.edit response structure:", JSON.stringify(response, null, 2)); // Log the full response structure
-
-      // Get the base64 image data from the response
-      image_base64 = response.data[0]?.b64_json; // Use optional chaining
+      const image_base64 = response.data[0]?.b64_json;
       if (!image_base64) {
-        console.error("OpenAI response missing b64_json:", response);
-        throw new Error('No b64_json in OpenAI images.edit response data[0]');
+        console.error("[callOpenAI] OpenAI response missing b64_json:", response);
+        throw new Error('No b64_json in OpenAI images.edit response');
       }
-      console.log("OpenAI images.edit successfully generated base64 data (first 60 chars):", image_base64.substring(0, 60) + "...");
+      console.log("[callOpenAI] Successfully generated base64 data.");
 
-    } catch (openaiError: any) { // Type error as any to access properties
-      // Enhanced logging in catch block
-      console.error(`[${new Date().toISOString()}] [OpenAI Call Error] Error during images.edit:`, openaiError);
-      if (openaiError.response) {
-          console.error("[OpenAI Call Error] Response Status:", openaiError.response.status);
-          console.error("[OpenAI Call Error] Response Data:", openaiError.response.data);
-      } else {
-          console.error("[OpenAI Call Error] Error Message:", openaiError.message);
-          // Check specifically for timeout errors (structure might vary slightly by SDK version/error type)
-          if (openaiError.code === 'ETIMEDOUT' || openaiError.message?.includes('timeout')) {
-               console.error("[OpenAI Call Error] Request timed out after 3 minutes.");
-          }
-      }
-
-      // In development, fall back to placeholder if OpenAI call fails
-      if (process.env.NODE_ENV !== "production") {
-        console.warn("Using placeholder image due to OpenAI API error");
-        return {
-          success: true,
-          inputImageUrl: params.inputImagePath, // Use inputImagePath
-          generatedImageUrl: '/placeholder-render.jpg',
-          prompt,
-        };
-      }
-      
-      // Re-throw in production
-      throw openaiError; // Re-throw after logging
-    }
-
-    // 4. Decode base64 and prepare buffer
-    const generatedImageBuffer = Buffer.from(image_base64, 'base64');
-    console.log(`Decoded generated image: ${generatedImageBuffer.length} bytes`);
-
-    // 5. Generate a unique filename
-    const filename = `render_${Date.now()}_${params.userId}.png`;
-
-    // 6. Upload the generated image buffer to UploadThing
-    try {
-      const permanentImageUrl = await uploadBufferToUploadThing(generatedImageBuffer, filename);
-
-      // Return the result with the permanent URL
+      // Return success with base64 data and prompt
       return {
         success: true,
-        inputImageUrl: params.inputImagePath, // Use inputImagePath
-        generatedImageUrl: permanentImageUrl,
-        prompt, // Include the prompt used
+        imageData: image_base64,
+        prompt: prompt,
       };
-    } catch (uploadError) {
-      console.error("Error uploading buffer to UploadThing:", uploadError);
 
-      // If UploadThing fails, return error status (or potentially the local fallback URL if desired)
+    } catch (openaiError: any) {
+      console.error(`[callOpenAI] Error during images.edit:`, openaiError);
+      if (openaiError.response) {
+        console.error("[callOpenAI] Response Status:", openaiError.response.status);
+        console.error("[callOpenAI] Response Data:", openaiError.response.data);
+      } else {
+        console.error("[callOpenAI] Error Message:", openaiError.message);
+        if (openaiError.code === 'ETIMEDOUT' || openaiError.message?.includes('timeout')) {
+          console.error("[callOpenAI] Request timed out.");
+        }
+      }
+      // Return failure status
       return {
         success: false,
-        error: `Failed to upload generated image: ${uploadError instanceof Error ? uploadError.message : 'Unknown upload error'}`,
-        prompt, // Include prompt even on upload failure
+        error: `OpenAI API error: ${openaiError.message || 'Unknown error'}`,
+        prompt: prompt, // Include prompt even on failure
       };
     }
   } catch (error) {
-    console.error('Error generating render:', error);
+    console.error('[callOpenAI] Unexpected error:', error);
     return {
       success: false,
-      error: error instanceof Error ? error.message : 'Failed to generate render. Please try again later.',
+      error: error instanceof Error ? error.message : 'Unexpected error during OpenAI call.',
     };
   }
 }
 
-// Type for render result
-export type RenderResult = {
-  success: boolean;
-  inputImageUrl?: string; // Renamed from originalImageUrl
-  generatedImageUrl?: string;
-  prompt?: string;
-  error?: string;
-  uploadError?: string; // Keep for potential upload-specific errors
-};
+
+// Removed deprecated generateRender function and RenderResult type
 
 export async function uploadImage(fileUrl: string) {
   // This function now just returns the URL from uploadthing
