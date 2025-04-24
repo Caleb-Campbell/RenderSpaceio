@@ -6,6 +6,8 @@ import { uploadRenderedImage, type UploadResult } from '@/lib/uploadthing';
 import { eq, and, sql } from 'drizzle-orm';
 import { logActivity } from '@/lib/db/queries';
 import { publishToUserChannel } from '@/lib/redis'; // Import Redis publisher
+import { Job } from 'bullmq'; // Import Job type
+import { RenderJobData } from '@/lib/queue'; // Import the job data interface
 
 // Removed appendDebugLog helper function
 
@@ -65,10 +67,17 @@ export async function createRenderJob({
 }
 
 /**
- * Executes the full render pipeline for a given job ID.
+ * Executes the full render pipeline for a given job.
  * This is intended to be called by the background job worker.
  */
-export async function executeRenderPipeline(jobId: string): Promise<{ success: boolean; error?: string }> {
+// Update function signature to accept the full job object
+export async function executeRenderPipeline(job: Job<RenderJobData>): Promise<{ success: boolean; error?: string }> {
+  const jobId = job.id; 
+  // Ensure jobId is defined before proceeding (should always be the case for an active job)
+  if (!jobId) {
+    console.error(`[Job without ID?] executeRenderPipeline called without a job ID.`);
+    throw new Error('Job ID is missing');
+  }
   console.log(`[${jobId}] executeRenderPipeline started.`);
   let renderJob;
   let openAIResult: OpenAIResult | undefined;
@@ -89,6 +98,7 @@ export async function executeRenderPipeline(jobId: string): Promise<{ success: b
       throw new Error('Render job not found');
     }
     console.log(`[${jobId}] Found job. Current status: ${renderJob.status}`);
+    await job.updateProgress(10); // Correct method: updateProgress
 
     // Check if job is already completed or failed
     if (renderJob.status === RenderStatus.COMPLETED || renderJob.status === RenderStatus.FAILED) {
@@ -118,6 +128,7 @@ export async function executeRenderPipeline(jobId: string): Promise<{ success: b
       throw new Error(openAIResult.error || 'Failed to generate render in OpenAI (missing image data)');
     }
     console.log(`[${jobId}] OpenAI generation successful.`);
+    await job.updateProgress(50); // Correct method: updateProgress
 
     // 4. Update status to UPLOADING
     console.log(`[${jobId}] Updating status to UPLOADING...`);
@@ -139,6 +150,7 @@ export async function executeRenderPipeline(jobId: string): Promise<{ success: b
       throw new Error(uploadResult.error || 'Failed to upload rendered image (missing image URL)');
     }
     console.log(`[${jobId}] Upload successful. URL: ${uploadResult.imageUrl}`);
+    await job.updateProgress(80); // Correct method: updateProgress
 
     // --- CRITICAL DB UPDATE ---
     // 6. Update Job to COMPLETED (Primary Success Indicator)
@@ -267,6 +279,7 @@ export async function executeRenderPipeline(jobId: string): Promise<{ success: b
 
     // --- Publish Completion Event to Redis ---
     if (finalStatus === RenderStatus.COMPLETED) {
+      await job.updateProgress(100); // Correct method: updateProgress
       console.log(`[${jobId}] Publishing completion event to Redis channel user-events:${renderJob.userId}...`);
       await publishToUserChannel(renderJob.userId, 'render.completed', {
         jobId: renderJob.id,

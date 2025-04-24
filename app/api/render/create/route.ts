@@ -40,7 +40,7 @@ export async function POST(request: NextRequest) {
     // Enqueue the job for background processing with options
   // Define job options with explicit type
   const jobOptions: JobsOptions = {
-    timeout: 300000, // 5 minutes in milliseconds
+    timeout: 800000, // 800 seconds in milliseconds
     attempts: 2,     // Allow 1 retry if the job fails
     removeOnComplete: true, // Keep queue clean
     removeOnFail: { count: 100 } // Keep last 100 failed jobs

@@ -15,8 +15,8 @@ const RENDER_QUEUE_NAME = 'renderQueue';
 // Create the queue instance
 export const renderQueue = new Queue(RENDER_QUEUE_NAME, { connection });
 
-// Define the job data interface (optional but good practice)
-interface RenderJobData {
+// Define and export the job data interface
+export interface RenderJobData {
   jobId: string;
 }
 
@@ -25,9 +25,11 @@ interface RenderJobData {
 export const renderWorker = new Worker<RenderJobData>(
   RENDER_QUEUE_NAME,
   async (job: Job<RenderJobData>) => {
+    // Pass the entire job object to the pipeline
     console.log(`Processing job ${job.id} with data:`, job.data);
     try {
-      const result = await executeRenderPipeline(job.data.jobId);
+      // Pass the entire job object now
+      const result = await executeRenderPipeline(job); 
       console.log(`Job ${job.id} completed successfully.`);
       return result; // Return value is stored in the job object
     } catch (error) {
@@ -36,7 +38,12 @@ export const renderWorker = new Worker<RenderJobData>(
       throw error;
     }
   },
-  { connection }
+  { 
+    connection,
+    lockDuration: 300000, // 5 minutes
+    stalledInterval: 60000, // 1 minute
+    // maxStalledCount: 3 // Optional: Consider adding this later if needed
+  }
 );
 
 // Event listeners for the worker (optional but useful for logging/monitoring)
