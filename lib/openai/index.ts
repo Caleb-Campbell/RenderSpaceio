@@ -67,12 +67,12 @@ async function uploadBufferToUploadThing(imageBuffer: Buffer, filename: string):
     } catch (utError) {
       console.error("UploadThing upload failed:", utError);
       // Throw the error instead of returning a local fallback
-      throw utError;
+     throw utError; // Re-throws the error
     }
-  } catch (error) {
-    console.error('Error in uploadBufferToUploadThing:', error);
-    // Provide a generic placeholder on error during upload process
-    return '/placeholder-render.jpg';
+  } catch (error) { // Outer catch
+    console.error('Error during upload buffer process:', error);
+    // Re-throw the error so the caller knows the upload failed
+    throw error;
   }
 }
 
@@ -129,9 +129,9 @@ export async function generateRender(params: RenderParams): Promise<RenderResult
     // 3. Make the API call to OpenAI images.edit
     let image_base64: string | undefined;
     const apiParams = {
-      model: "gpt-image-1", // Using a placeholder model name as per original code
+      model: "dall-e-3", // Correct DALL-E 3 model name
       prompt: prompt,
-      n: 1, 
+      n: 1,
       size: "1024x1024" as const, // Specify desired size using 'as const' for literal type
     };
     console.log("Calling OpenAI images.edit API with params:", { ...apiParams, image: `[File object for ${params.inputImagePath}]` }); // Log params without image data
