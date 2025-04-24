@@ -1,14 +1,14 @@
 import { createUploadthing, type FileRouter } from "uploadthing/next";
+import { UploadThingError } from "uploadthing/server"; // Import UploadThingError
 import { getSessionUser } from "../auth/session";
- 
+
 const f = createUploadthing();
- 
-export const uploadRouter = {
-  // Define image upload routes
-  imageUploader: f({ image: { maxFileSize: "8MB", maxFileCount: 1 } })
-    .middleware(async () => {
-      // Get user from session to verify authentication
-      const user = await getSessionUser();
+
+// Define the full image uploader logic
+const imageUploaderLogic = f({ image: { maxFileSize: "8MB", maxFileCount: 1 } })
+  .middleware(async () => {
+    // Get user from session to verify authentication
+    const user = await getSessionUser();
  
       if (!user) throw new Error("Unauthorized");
  
@@ -21,7 +21,15 @@ export const uploadRouter = {
       console.log("File URL:", file.url);
  
       return { fileUrl: file.url, userId: metadata.userId };
-    }),
-} satisfies FileRouter;
- 
+    })
+    .onUploadError(({ error }: { error: UploadThingError }) => { // Add type annotation
+      // This code runs on upload error
+      console.error("Upload error:", error.message); // Log the error message
+    // UploadThing handles sending the error response to the client.
+  });
+
+export const uploadRouter = {
+  imageUploader: imageUploaderLogic,
+}; // Removed 'satisfies FileRouter'
+
 export type OurFileRouter = typeof uploadRouter;
