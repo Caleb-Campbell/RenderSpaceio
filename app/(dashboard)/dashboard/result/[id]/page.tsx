@@ -77,6 +77,7 @@ function ResultContent({ paramsPromise }: { paramsPromise: Promise<ResolvedParam
         }
         
         const job = await response.json();
+        console.log("Render Result Returned (Client-side):", job); // Log the returned job data
         
         // Set the job data
         setRenderJob(job);

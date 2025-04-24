@@ -165,11 +165,16 @@ function RenderingContent() {
     if (!renderJobId) return;
     
     const checkJobStatus = async () => {
+      console.log(`Polling status for job ID: ${renderJobId}...`); // Log before fetch
       try {
         const response = await fetch(`/api/render/status?id=${renderJobId}`);
+        console.log(`Polling response status: ${response.status}`); // Log response status
         if (!response.ok) {
-          throw new Error('Failed to check job status');
+          const errorText = await response.text(); // Try to get error text
+          console.error(`Polling failed with status ${response.status}: ${errorText}`);
+          throw new Error(`Failed to check job status (${response.status})`);
         }
+        console.log("Polling response received successfully."); // Log successful fetch
         
         const job = await response.json();
         console.log(`Job status: ${job.status}, error: ${job.errorMessage || 'none'}`);
@@ -200,7 +205,7 @@ function RenderingContent() {
           }
          }
        } catch (err) {
-         console.error('Error checking job status:', err);
+         console.error('Polling Error Caught:', err); // Log the caught error
          // Set error state to break the loop and inform the user
          setError(err instanceof Error ? `Polling failed: ${err.message}` : 'An unknown error occurred while checking render status.');
        }
