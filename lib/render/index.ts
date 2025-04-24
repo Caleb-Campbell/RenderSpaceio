@@ -62,7 +62,7 @@ export async function createRenderJob({
  * Process a render job
  */
 export async function processRenderJob(job: { id: string }) { // Changed id type to string
-  console.log(`PROCESS_JOB: Starting processing for job ${job.id}`);
+  console.log(`PROCESS_JOB: Starting processing for job ${job.id}`); // Moved this log to the very top
   // Get the render job
   console.log(`PROCESS_JOB: Fetching job ${job.id} details from DB...`);
   const renderJob = await db.query.renderJobs.findFirst({

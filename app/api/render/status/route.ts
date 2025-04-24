@@ -106,7 +106,9 @@ export async function GET(request: NextRequest) {
         // Ensure processRenderJob updates 'updatedAt' when it sets status to PROCESSING
         processRenderJob(job).catch(error => {
           // Log errors during the *triggering* of the process, not the process itself
-          console.error(`API: Error triggering background processing for job ${job.id}:`, error);
+          // Add more detailed logging here
+          const errorMessage = error instanceof Error ? error.message : 'Unknown error during trigger';
+          console.error(`API: CATCH BLOCK - Error occurred while *triggering* background processing for job ${job.id}. Error: ${errorMessage}`, error);
         });
         // Return the current PENDING status, it will update on next poll
         console.log(`API: Background processing triggered for ${job.id}. Returning current PENDING status.`);
