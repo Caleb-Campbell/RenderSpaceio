@@ -60,6 +60,7 @@ export const renderWorker = new Worker<RenderJobData>(
     lockDuration: 300000, // 5 minutes
     stalledInterval: 60000, // 1 minute
     // maxStalledCount: 3 // Optional: Consider adding this later if needed
+    concurrency: 10 // Allow processing up to 10 jobs concurrently per worker instance
   }
 );
 
