@@ -6,9 +6,10 @@ import { UTApi } from 'uploadthing/server';
 import { Readable } from 'stream';
 
 // Initialize OpenAI client only if API key is available
-const openai = process.env.OPENAI_API_KEY 
+const openai = process.env.OPENAI_API_KEY
   ? new OpenAI({
       apiKey: process.env.OPENAI_API_KEY,
+      timeout: 180000, // 3-minute timeout
     })
   : null;
 
@@ -135,6 +136,8 @@ export async function generateRender(params: RenderParams): Promise<RenderResult
     };
     console.log("Calling OpenAI images.edit API with params:", { ...apiParams, image: `[File object for ${params.inputImagePath}]` }); // Log params without image data
 
+    // Add timestamped log before the call
+    console.log(`[${new Date().toISOString()}] Starting OpenAI images.edit call. Prompt: "${prompt.substring(0, 50)}...", Size: ${apiParams.size}`);
     try {
       // The OpenAI SDK expects a File-like object (like the browser File API) or ReadStream.
       // Create a File object from the buffer.
@@ -149,6 +152,8 @@ export async function generateRender(params: RenderParams): Promise<RenderResult
         image: imageFile, // Pass the created File object
       });
 
+      // Add timestamped log after successful call
+      console.log(`[${new Date().toISOString()}] OpenAI images.edit call successful. Received b64_json (length: ${response.data[0]?.b64_json?.length})`);
       console.log("Received OpenAI images.edit response structure:", JSON.stringify(response, null, 2)); // Log the full response structure
 
       // Get the base64 image data from the response
@@ -160,15 +165,19 @@ export async function generateRender(params: RenderParams): Promise<RenderResult
       console.log("OpenAI images.edit successfully generated base64 data (first 60 chars):", image_base64.substring(0, 60) + "...");
 
     } catch (openaiError: any) { // Type error as any to access properties
-      console.error("OpenAI API error (images.edit):", openaiError);
-      // Log more details if available (e.g., response status, error message)
+      // Enhanced logging in catch block
+      console.error(`[${new Date().toISOString()}] [OpenAI Call Error] Error during images.edit:`, openaiError);
       if (openaiError.response) {
-        console.error("OpenAI API Error Response Status:", openaiError.response.status);
-        console.error("OpenAI API Error Response Data:", openaiError.response.data);
+          console.error("[OpenAI Call Error] Response Status:", openaiError.response.status);
+          console.error("[OpenAI Call Error] Response Data:", openaiError.response.data);
       } else {
-        console.error("OpenAI API Error Message:", openaiError.message);
+          console.error("[OpenAI Call Error] Error Message:", openaiError.message);
+          // Check specifically for timeout errors (structure might vary slightly by SDK version/error type)
+          if (openaiError.code === 'ETIMEDOUT' || openaiError.message?.includes('timeout')) {
+               console.error("[OpenAI Call Error] Request timed out after 3 minutes.");
+          }
       }
-      
+
       // In development, fall back to placeholder if OpenAI call fails
       if (process.env.NODE_ENV !== "production") {
         console.warn("Using placeholder image due to OpenAI API error");
