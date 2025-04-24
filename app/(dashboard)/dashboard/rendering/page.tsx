@@ -198,11 +198,13 @@ function RenderingContent() {
             setError(errorMsg);
             // No progress state to reset
           }
-        }
-      } catch (err) {
-        console.error('Error checking job status:', err);
-      }
-    };
+         }
+       } catch (err) {
+         console.error('Error checking job status:', err);
+         // Set error state to break the loop and inform the user
+         setError(err instanceof Error ? `Polling failed: ${err.message}` : 'An unknown error occurred while checking render status.');
+       }
+     };
     
     // Check status immediately
     checkJobStatus();
