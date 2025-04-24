@@ -1,9 +1,9 @@
 'use client';
 
 import Link from 'next/link';
-import { use, useState, Suspense, useEffect, useRef } from 'react'; // Added useEffect, useRef
+import { use, useState, Suspense, useEffect, useRef } from 'react';
 import { Button } from '@/components/ui/button';
-import { CircleIcon, Home, LogOut, MessageSquareQuoteIcon, CheckCircle, XCircle, ExternalLink } from 'lucide-react'; // Added icons for toast
+import { CircleIcon, Home, LogOut, MessageSquareQuoteIcon, CheckCircle, XCircle, ExternalLink, Loader2 } from 'lucide-react'; // Added Loader2
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -16,7 +16,8 @@ import { signOut } from '@/app/(login)/actions';
 import { useRouter } from 'next/navigation';
 import Image from 'next/image';
 import { usePostHog } from 'posthog-js/react';
-import toast from 'react-hot-toast'; // Added toast import
+import toast from 'react-hot-toast';
+import { RenderJob } from '@/lib/db/schema'; // Import RenderJob type
 
 function UserMenu() {
   const [isMenuOpen, setIsMenuOpen] = useState(false);
@@ -146,20 +147,72 @@ interface RenderEventData {
 
 export default function Layout({ children }: { children: React.ReactNode }) {
   const eventSourceRef = useRef<EventSource | null>(null);
-  const { userPromise } = useUser(); // Get user promise to check auth status
-  const user = use(userPromise); // Resolve user promise
+  const { userPromise } = useUser();
+  const user = use(userPromise);
+  // Removed activeJobChecked ref
 
+  // Effect to check for active render job on initial load or user change
   useEffect(() => {
-    // Only establish SSE connection if the user is logged in
     if (!user) {
-      console.log('SSE: User not logged in, skipping connection.');
+      console.log('Active job check: No user, skipping.');
+      return; // Don't run if not logged in
+    }
+
+    let isMounted = true; // Flag to prevent state updates on unmounted component
+
+    const checkActiveJob = async () => {
+      console.log(`Active job check: Running for user ${user.id}`);
+      try {
+        const response = await fetch('/api/render/active');
+        console.log(`Active job check: API response status: ${response.status}`);
+
+        if (!response.ok) {
+          const errorText = await response.text();
+          throw new Error(`HTTP error! status: ${response.status}, body: ${errorText}`);
+        }
+
+        const activeJob: RenderJob | null = await response.json();
+
+        if (!isMounted) return; // Don't update state if component unmounted
+
+        if (activeJob) {
+          console.log(`Active job check: Found active job: ${activeJob.id}, Status: ${activeJob.status}, Title: "${activeJob.title}"`);
+          toast.loading(
+            `Your render "${activeJob.title}" is currently ${activeJob.status}...`,
+            {
+              id: 'active-render-toast', // Unique ID for this toast
+              duration: Infinity, // Keep it until dismissed
+              icon: <Loader2 className="h-5 w-5 animate-spin text-orange-500" />,
+            }
+          );
+        } else {
+          console.log('Active job check: No active render job found from API.');
+        }
+      } catch (error) {
+        console.error('Active job check: Failed -', error);
+        // Optionally show a temporary error toast
+        // if (isMounted) toast.error('Could not check for ongoing renders.');
+      }
+    };
+
+    checkActiveJob();
+
+    return () => {
+      isMounted = false; // Set flag on cleanup
+      console.log('Active job check: Effect cleanup.');
+    };
+  }, [user]); // Re-run check if user object changes
+
+  // Effect for SSE connection
+  useEffect(() => {
+    if (!user) {
+      console.log('SSE: User not logged in, skipping SSE connection.');
       return;
     }
 
-    console.log('SSE: Attempting to establish connection...');
-    // Ensure only one connection is active
+    // Prevent duplicate SSE connections if layout re-renders but user hasn't changed
     if (eventSourceRef.current) {
-      console.log('SSE: Connection already exists, skipping.');
+      console.log('SSE: Connection already exists, skipping new setup.');
       return;
     }
 
@@ -182,6 +235,9 @@ export default function Layout({ children }: { children: React.ReactNode }) {
       console.log('SSE: Message received:', event.data);
       try {
         const messageData = JSON.parse(event.data) as { event: string; data: RenderEventData };
+
+        // Dismiss the loading toast if it exists when a final status arrives
+        toast.dismiss('active-render-toast');
 
         if (messageData.event === 'render.completed') {
           const { jobId, title, resultImageUrl } = messageData.data;
@@ -229,10 +285,10 @@ export default function Layout({ children }: { children: React.ReactNode }) {
                 </div>
               </div>
             ),
-            { duration: 10000 } // Keep toast longer
+            { duration: 10000 }
           );
         } else if (messageData.event === 'render.failed') {
-          const { title, errorMessage } = messageData.data;
+          const { jobId, title, errorMessage } = messageData.data; // Include jobId if needed
            toast.error(
              `Render failed for "${title}". ${errorMessage ? `Reason: ${errorMessage}` : ''}`,
              {

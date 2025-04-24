@@ -8,15 +8,51 @@ import {
   Carousel,
   CarouselContent,
   CarouselItem,
-  CarouselNext,
-  CarouselPrevious,
-} from "@/components/ui/carousel"
-import Autoplay from "embla-carousel-autoplay"
+} from "@/components/ui/carousel" // Re-added Carousel imports
+import Autoplay from "embla-carousel-autoplay" // Re-added Autoplay
 
+// The desired list of examples with utfs.io URLs
 const examples = [
-  { id: 1, before: "/examples/example_1/before/PNG image.jpeg", after: "/examples/example_1/after/41677395-C7FF-4C10-9860-54A7A9F10688.png" },
-  { id: 2, before: "/examples/example_2/before/IMG_7354.JPG", after: "/examples/example_2/after/RenderSpace_Living Room_Bright.png" },
-  { id: 3, before: "/examples/example_3/before/IMG_7353.JPG", after: "/examples/example_3/after/RenderSpace_Living Room_Bright.png" },
+  {
+    id: 1,
+    before: "https://utfs.io/f/VSzDhtn7Jw1jsxSlKrGWUf835ag0KMxZcl1doybrG2uAzmTS",
+    after: "https://utfs.io/f/VSzDhtn7Jw1jSubSCjHoZqWjTMkQGRe7fwl9vdhcHD0ObYsC"
+  },
+  // {
+  //   id: 2,
+  //   before: "https://utfs.io/f/VSzDhtn7Jw1jJyyblX4bGEzZDmdxUYAfiN1y4WSaotMqhQws",
+  //   after: "https://utfs.io/f/VSzDhtn7Jw1jdNNuUwE7Fu9bTQAPx4EWv5lZ8HodGVwzsm0L"
+  // },
+  // {
+  //   id: 3,
+  //   before: "https://utfs.io/f/VSzDhtn7Jw1jmzrCItT31hf9LnTsQ5bF8YqZkxIvHJRtDW6A",
+  //   after: "https://utfs.io/f/VSzDhtn7Jw1jwa1Dif7uVUxSKCvOPXrlJgcyGbtkzA08LwM4"
+  // },
+  // {
+  //   id: 4,
+  //   before: "https://utfs.io/f/VSzDhtn7Jw1jwlnyaV7uVUxSKCvOPXrlJgcyGbtkzA08LwM4",
+  //   after: "https://utfs.io/f/VSzDhtn7Jw1jUIIIVSj1buci72CpkV3d6xDQlNSJR0jgzA9P"
+  // },
+  {
+    id: 5,
+    before: "https://utfs.io/f/VSzDhtn7Jw1jgZbVciBUc5ZFrd9p7E0na6lQIyH4bokNMfhx",
+    after: "https://utfs.io/f/VSzDhtn7Jw1jQ9joOSeClSUzWYR3IFra72KD9kyhT4LmZu0t"
+  },
+  {
+    id: 6,
+    before: "https://utfs.io/f/VSzDhtn7Jw1jIv55bLhMDkVetJH3AWmr8FnyPu4XcTzo1jGx",
+    after: "https://utfs.io/f/VSzDhtn7Jw1js1jlubGWUf835ag0KMxZcl1doybrG2uAzmTS"
+  },
+  {
+    id: 7,
+    before: "https://utfs.io/f/VSzDhtn7Jw1jIQbPJyMDkVetJH3AWmr8FnyPu4XcTzo1jGxi",
+    after: "https://utfs.io/f/VSzDhtn7Jw1jUrzp9U1buci72CpkV3d6xDQlNSJR0jgzA9PT"
+  },
+  {
+    id: 8,
+    before: "https://utfs.io/f/VSzDhtn7Jw1jABF2tQBTQWgxntUJwXCj7f5EHv4BT0zOiarP",
+    after: "https://utfs.io/f/VSzDhtn7Jw1jOLcc1us1vKTU3MN5AIyclD90ErwtjGFQskC6"
+  }
 ];
 
 export default function LandingPage() {
@@ -46,36 +82,63 @@ export default function LandingPage() {
                 </div>
               </div>
             </div>
-            <div className="mt-12 relative sm:max-w-lg sm:mx-auto lg:mt-0 lg:max-w-none lg:mx-0 lg:col-span-6 lg:flex lg:items-center">
-              <Carousel
-                className="relative mx-auto w-full rounded-sm shadow-lg lg:max-w-md"
-                plugins={[
-                  Autoplay({
-                    delay: 3000, // Adjust delay as needed (milliseconds)
-                    stopOnInteraction: false,
-                  }),
-                ]}
-                opts={{
-                  loop: true,
-                }}
-              >
-                <CarouselContent>
-                  {examples.map((example) => (
-                    <CarouselItem key={example.id}>
-                      <div className="relative block w-full bg-card rounded-sm overflow-hidden">
-                        <Image
-                          src={example.after}
-                          alt={`Example Render ${example.id}`}
-                          width={640} // Adjust dimensions as needed
-                          height={360}
-                          className="w-full h-auto object-cover" // Adjust styling as needed
-                        />
+            {/* Auto-Scrolling Examples Carousel */}
+            <div className="mt-12 lg:mt-0 lg:col-span-6">
+              {examples.length > 0 && (
+                <Carousel
+                  className="w-full" // Take full width of the column
+                  plugins={[
+                    Autoplay({
+                      delay: 2500, // Adjust speed (milliseconds)
+                      stopOnInteraction: false, // Continue playing even if user interacts
+                      stopOnMouseEnter: true, // Pause when mouse hovers
+                    }),
+                  ]}
+                  opts={{
+                    align: "start",
+                    loop: true,
+                  }}
+                >
+                  <CarouselContent className="-ml-4"> {/* Adjust margin based on item padding */}
+                    {examples.map((example) => (
+                      <CarouselItem key={example.id} className="pl-4 md:basis-1/1 lg:basis-1/1"> {/* Show one full item at a time */}
+                        {/* Individual Example Card (Before & After) */}
+                        <div className="bg-card rounded-lg shadow-lg p-3">
+                          <div className="flex flex-col gap-3">
+                            {/* Before Image */}
+                            <div className="relative w-full aspect-video rounded-md overflow-hidden">
+                            <Image
+                              src={example.before}
+                              alt={`Example ${example.id} Before`}
+                              layout="fill"
+                              objectFit="contain"
+                              className="bg-gray-100"
+                            />
+                            <span className="absolute bottom-1 right-1 bg-black bg-opacity-60 text-white text-xs px-2 py-0.5 rounded">
+                              Before
+                            </span>
+                          </div>
+                          {/* After Image */}
+                          <div className="relative w-full aspect-video rounded-md overflow-hidden">
+                            <Image
+                              src={example.after}
+                              alt={`Example ${example.id} After`}
+                              layout="fill"
+                              objectFit="contain"
+                              className="bg-gray-100"
+                            />
+                            <span className="absolute bottom-1 right-1 bg-black bg-opacity-60 text-white text-xs px-2 py-0.5 rounded">
+                              After
+                            </span>
+                          </div>
+                        </div>
                       </div>
                     </CarouselItem>
-                  ))}
-                </CarouselContent>
-                {/* No Previous/Next buttons here */}
-              </Carousel>
+                    ))}
+                  </CarouselContent>
+                  {/* Removed Previous/Next buttons for continuous scroll */}
+                </Carousel>
+              )}
             </div>
           </div>
         </div>

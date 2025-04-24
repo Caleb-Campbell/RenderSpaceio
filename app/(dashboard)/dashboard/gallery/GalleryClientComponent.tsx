@@ -139,6 +139,7 @@ export default function GalleryClientComponent({
          </Link>
       )}
 
+      {/* Your Renders Section */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between mb-8">
         <h1 className="text-3xl font-bold">Your Renders</h1>
         <div className="mt-4 sm:mt-0">

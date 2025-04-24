@@ -1,4 +1,4 @@
-'use client';
+ 'use client';
 
 import { useState, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
@@ -221,6 +221,9 @@ export default function NewRenderPage() {
             {/* Image Upload Area */}
             <div className="space-y-2">
               <Label htmlFor="collage">Upload Design Collage</Label>
+              <p className="text-sm text-muted-foreground">
+                We recommend using something like <a href="https://www.shffls.com/" target="_blank" rel="noopener noreferrer" className="text-primary underline">Shffles</a> to create your collage.
+              </p>
               <UploadDropzone 
                 onUploadStart={handleUploadStarted}
                 onUploadComplete={handleUploadComplete}

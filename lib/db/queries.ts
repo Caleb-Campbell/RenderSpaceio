@@ -1,4 +1,4 @@
-import { desc, and, eq, isNull, count, gte } from 'drizzle-orm';
+import { desc, and, eq, isNull, count, gte, or } from 'drizzle-orm';
 import { db } from './drizzle';
 import { activityLogs, teamMembers, teams, users, renderJobs, ActivityType, RenderStatus } from './schema';
 import { cookies } from 'next/headers';
@@ -169,6 +169,34 @@ export async function getTotalRendersForTeam(teamId: number) {
     .where(and(eq(renderJobs.teamId, teamId), eq(renderJobs.status, RenderStatus.COMPLETED)));
 
   return result[0]?.value ?? 0;
+}
+
+/**
+ * Fetches the most recent active (pending or processing) render job for a user
+ * created within the last 5 minutes.
+ * @param userId The ID of the user.
+ * @returns The render job object or null if no active job is found.
+ */
+export async function getRecentActiveRenderJobForUser(userId: number) {
+  const fiveMinutesAgo = new Date(Date.now() - 5 * 60 * 1000);
+
+  const result = await db
+    .select()
+    .from(renderJobs)
+    .where(
+      and(
+        eq(renderJobs.userId, userId),
+        gte(renderJobs.createdAt, fiveMinutesAgo),
+        or(
+          eq(renderJobs.status, RenderStatus.PENDING),
+          eq(renderJobs.status, RenderStatus.PROCESSING)
+        )
+      )
+    )
+    .orderBy(desc(renderJobs.createdAt))
+    .limit(1);
+
+  return result.length > 0 ? result[0] : null;
 }
 
 export async function getRecentRendersCountForTeam(teamId: number, days: number = 7) {
