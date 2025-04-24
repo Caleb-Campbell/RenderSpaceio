@@ -4,32 +4,30 @@ import { getSessionUser } from "../auth/session";
 
 const f = createUploadthing();
 
-// Define the full image uploader logic
-const imageUploaderLogic = f({ image: { maxFileSize: "8MB", maxFileCount: 1 } })
-  .middleware(async () => {
-    // Get user from session to verify authentication
-    const user = await getSessionUser();
+export const uploadRouter = {
+  // Define the full image uploader logic directly here
+  imageUploader: f({ image: { maxFileSize: "8MB", maxFileCount: 1 } })
+    .middleware(async () => {
+      // Get user from session to verify authentication
+      const user = await getSessionUser();
  
       if (!user) throw new Error("Unauthorized");
  
       // Return user data to be available in onUploadComplete
       return { userId: user.id };
     })
-    .onUploadComplete(async ({ metadata, file }) => {
+    .onUploadError(({ error }: { error: UploadThingError }) => { // Moved before onUploadComplete
+      // This code runs on upload error
+      console.error("Upload error:", error.message); // Log the error message
+      // UploadThing handles sending the error response to the client.
+    })
+    .onUploadComplete(async ({ metadata, file }) => { // Moved to be the last callback
       // This code runs after upload completes
       console.log("Upload complete for userId:", metadata.userId);
       console.log("File URL:", file.url);
- 
-      return { fileUrl: file.url, userId: metadata.userId };
-    })
-    .onUploadError(({ error }: { error: UploadThingError }) => { // Add type annotation
-      // This code runs on upload error
-      console.error("Upload error:", error.message); // Log the error message
-    // UploadThing handles sending the error response to the client.
-  });
 
-export const uploadRouter = {
-  imageUploader: imageUploaderLogic,
+      return { fileUrl: file.url, userId: metadata.userId };
+    }),
 }; // Removed 'satisfies FileRouter'
 
 export type OurFileRouter = typeof uploadRouter;
