@@ -70,7 +70,7 @@ export default function LandingPage() {
                   Into Reality
                 </h1>
                 <p className="mt-3 text-base text-muted-foreground sm:mt-5 sm:text-xl lg:text-lg xl:text-xl">
-                  Upload your design elements and our AI will generate stunning interior space visualizations in seconds. Perfect for designers, decorators, and homeowners.
+                  Upload your design collages from Photoshop, Canva, or any design tool. Our AI transforms them into stunning, realistic interior space visualizations in seconds. Perfect for designers, decorators, and homeowners.
                 </p>
                 <div className="mt-8 sm:max-w-lg sm:mx-auto sm:text-center lg:text-left lg:mx-0 space-y-4 sm:space-y-0 sm:flex sm:gap-4">
                   <Link href="/sign-up">
@@ -162,10 +162,10 @@ export default function LandingPage() {
               <div className="ml-16">
                 <h3 className="text-lg font-medium text-foreground">Upload Your Design Elements</h3>
                 <p className="mt-2 text-base text-muted-foreground">
-                  Create a collage with furniture, colors, textures, and materials you want in your space.
+                  Import your design collages directly from Photoshop, Canva, or any design tool. We'll process and beautify your renders, maintaining your creative vision while enhancing the final result.
                 </p>
-                <p>
-                  We recommend using something like <a href="https://www.shffls.com/" target="_blank" rel="noopener noreferrer" className="text-primary underline">Shffles</a> to create your collage.
+                <p className="mt-2 text-sm text-muted-foreground">
+                  We support various formats including PSD, PNG, JPG, and PDF files.
                 </p>
               </div>
             </div>
@@ -207,10 +207,10 @@ export default function LandingPage() {
               </div>
               <div className="mt-5">
                 <h3 className="text-lg font-medium text-foreground">
-                  High-Quality Renders
+                  Universal Design Tool Support
                 </h3>
                 <p className="mt-2 text-base text-muted-foreground">
-                  Generate professional-grade visualizations at 1024x1024 resolution with realistic lighting and textures.
+                  Seamlessly import and enhance designs from Photoshop, Canva, and other popular design tools. We preserve your creative vision while adding photorealistic quality.
                 </p>
               </div>
             </div>
@@ -221,10 +221,10 @@ export default function LandingPage() {
               </div>
               <div className="mt-5">
                 <h3 className="text-lg font-medium text-foreground">
-                  Fast Results
+                  Intelligent Enhancement
                 </h3>
                 <p className="mt-2 text-base text-muted-foreground">
-                  Get your visualization in minutes, saving hours of traditional rendering time.
+                  Our AI automatically beautifies your renders with professional-grade lighting, textures, and atmospheric details while maintaining your design choices.
                 </p>
               </div>
             </div>
@@ -235,10 +235,10 @@ export default function LandingPage() {
               </div>
               <div className="mt-5">
                 <h3 className="text-lg font-medium text-foreground">
-                  Design Freedom
+                  Creative Freedom
                 </h3>
                 <p className="mt-2 text-base text-muted-foreground">
-                  Mix and match any design elements, colors, and styles to visualize your unique interior concepts.
+                  Work with your preferred design tools and workflows. Import collages, mood boards, or individual elements - we'll transform them into stunning visualizations.
                 </p>
               </div>
             </div>
