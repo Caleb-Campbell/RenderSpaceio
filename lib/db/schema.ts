@@ -89,6 +89,7 @@ export const renderJobs = pgTable('render_jobs', {
   status: varchar('status', { length: 20 }).notNull().default('pending'), // pending, processing, uploading, completed, failed
   inputImagePath: text('input_image_path').notNull(), // Renamed from collageImagePath
   resultImagePath: text('result_image_path'),
+  emptyRoomImageUrl: text('empty_room_image_url'), // URL of the generated empty room (for 2-step process)
   prompt: text('prompt'),
   createdAt: timestamp('created_at').notNull(), // Removed .defaultNow()
   completedAt: timestamp('completed_at'),

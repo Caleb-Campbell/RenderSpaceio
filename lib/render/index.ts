@@ -1,8 +1,8 @@
 import { db } from '@/lib/db/drizzle';
-import { renderJobs, creditTransactions, teams, RenderStatus, ActivityType } from '@/lib/db/schema';
+import { renderJobs, creditTransactions, teams, RenderStatus, ActivityType, RenderJob } from '@/lib/db/schema'; // Added RenderJob type
 // Assume these functions will be created/modified in lib/openai and lib/uploadthing respectively
-import { callOpenAI, type OpenAIResult } from '@/lib/openai'; 
-import { uploadRenderedImage, type UploadResult } from '@/lib/uploadthing'; 
+import { callOpenAI, generateEmptyRoom, type OpenAIImageDataResult, type ProcessedImageUrlResult } from '@/lib/openai'; // Updated imports
+import { uploadRenderedImage, type UploadResult } from '@/lib/uploadthing';
 import { eq, and, sql } from 'drizzle-orm';
 import { logActivity } from '@/lib/db/queries';
 import { publishToUserChannel } from '@/lib/redis'; // Import Redis publisher
@@ -87,8 +87,8 @@ export async function executeRenderPipeline(job: Job<RenderJobData>): Promise<{ 
     // For now, log and continue, but this indicates a potential issue with BullMQ itself.
   }
   console.log(`[Job ${bullJobId} / UUID ${jobUuid}] executeRenderPipeline started.`);
-  let renderJob;
-  let openAIResult: OpenAIResult | undefined;
+  let renderJob: RenderJob | undefined; // Add type
+  let finalOpenAIResult: OpenAIImageDataResult | undefined; // Use the correct type for the final AI result
   let uploadResult: UploadResult | undefined;
   let finalStatus = RenderStatus.FAILED; // Assume failure unless explicitly set to COMPLETED
   let errorMessage = ''; // Accumulate non-critical errors
@@ -123,20 +123,89 @@ export async function executeRenderPipeline(job: Job<RenderJobData>): Promise<{ 
       .where(eq(renderJobs.id, jobUuid)); // Use jobUuid here
     console.log(`[Job ${bullJobId} / UUID ${jobUuid}] Status updated to PROCESSING.`);
 
-    // 3. Call OpenAI
-    console.log(`[Job ${bullJobId} / UUID ${jobUuid}] Calling OpenAI...`);
-    openAIResult = await callOpenAI({
-      inputImagePath: renderJob.inputImagePath,
-      roomType: renderJob.roomType,
-      lighting: renderJob.lighting,
-      userId: renderJob.userId.toString(),
-    });
-    console.log(`[Job ${bullJobId} / UUID ${jobUuid}] OpenAI returned. Success: ${openAIResult.success}`);
+    // 3. Execute AI Steps based on Job Type
+    const jobType = job.data.type;
+    let creditsToDeduct = 1; // Default for original flow
 
-    if (!openAIResult.success || !openAIResult.imageData) {
-      throw new Error(openAIResult.error || 'Failed to generate render in OpenAI (missing image data)');
+    if (jobType === 'room-placement') {
+      console.log(`[Job ${bullJobId} / UUID ${jobUuid}] Starting Room Placement flow.`);
+      creditsToDeduct = 2; // Set credits for this flow
+
+      if (!job.data.roomPhotoUrl || !job.data.collageImageUrl) {
+        throw new Error('Missing roomPhotoUrl or collageImageUrl in job data for room-placement type.');
+      }
+
+      // Step 3a: Generate Empty Room
+      console.log(`[Job ${bullJobId} / UUID ${jobUuid}] Calling generateEmptyRoom...`);
+      // TODO: Implement actual generateEmptyRoom function in lib/openai
+      const emptyRoomResult: ProcessedImageUrlResult = await generateEmptyRoom(job.data.roomPhotoUrl); // Use correct type
+      console.log(`[Job ${bullJobId} / UUID ${jobUuid}] generateEmptyRoom returned. Success: ${emptyRoomResult.success}`);
+
+      // Check for success and the presence of imageUrl
+      if (!emptyRoomResult.success || !emptyRoomResult.imageUrl) {
+        throw new Error(emptyRoomResult.error || 'Failed to generate or upload empty room (missing image URL)');
+      }
+      console.log(`[Job ${bullJobId} / UUID ${jobUuid}] Empty room generation and upload successful. URL: ${emptyRoomResult.imageUrl}`);
+      
+      // Save the empty room URL to the database
+      console.log(`[Job ${bullJobId} / UUID ${jobUuid}] Saving empty room URL to DB...`);
+      try {
+          await db.update(renderJobs)
+            .set({ emptyRoomImageUrl: emptyRoomResult.imageUrl })
+            .where(eq(renderJobs.id, jobUuid));
+          console.log(`[Job ${bullJobId} / UUID ${jobUuid}] Empty room URL saved.`);
+      } catch (dbUpdateError) {
+          // Log this as a non-critical error, as the main pipeline can continue
+          const msg = `Failed to save empty room URL: ${dbUpdateError instanceof Error ? dbUpdateError.message : dbUpdateError}`;
+          console.warn(`[Job ${bullJobId} / UUID ${jobUuid}] NON-CRITICAL WARNING: ${msg}`);
+          // Optionally append to an overall non-critical error message string if you have one
+          errorMessage += ` ${msg}`; // Append to the main error message for final logging
+      }
+      await job.updateProgress(35); // Optional: slightly adjust progress
+
+      // Step 3b: Place Collage into Empty Room
+      console.log(`[Job ${bullJobId} / UUID ${jobUuid}] Calling AI for placement...`);
+      // TODO: Ensure callOpenAI or a new function handles placement correctly,
+      // using ONLY emptyRoomResult.imageData as the primary input image.
+      // The collage image URL needs to be incorporated into the prompt, as the current
+      // callOpenAI function only accepts one input image path/data.
+      // TODO: Potentially modify callOpenAI or create a new function if the AI model
+      // can accept multiple image inputs (e.g., empty room + collage).
+      const placementPrompt = `Take the provided empty room image and place the design elements described in the collage found at ${job.data.collageImageUrl} into it realistically. Maintain the room structure. Room type: ${renderJob.roomType}, Lighting: ${renderJob.lighting}.`;
+      console.log(`[Job ${bullJobId} / UUID ${jobUuid}] Placement prompt (first 100 chars): ${placementPrompt.substring(0,100)}...`);
+
+      // Call callOpenAI, passing the EMPTY room image data as the inputImagePath.
+      // The internal prompt generation in callOpenAI might need adjustment,
+      // or we might need a way to pass our custom placementPrompt.
+      // Call callOpenAI, passing the EMPTY room image URL as the inputImagePath
+      // and the custom prompt constructed above.
+      finalOpenAIResult = await callOpenAI({
+        inputImagePath: emptyRoomResult.imageUrl, // Pass the generated empty room URL
+        roomType: renderJob.roomType, // Pass context for potential model use
+        lighting: renderJob.lighting, // Pass context for potential model use
+        userId: renderJob.userId.toString(),
+        customPrompt: placementPrompt // Pass the specific prompt for this step
+      });
+      console.log(`[Job ${bullJobId} / UUID ${jobUuid}] Placement AI returned. Success: ${finalOpenAIResult.success}`);
+
+    } else {
+      // Original Flow: Collage to Room
+      console.log(`[Job ${bullJobId} / UUID ${jobUuid}] Starting original Collage-to-Room flow.`);
+      console.log(`[Job ${bullJobId} / UUID ${jobUuid}] Calling OpenAI...`);
+      finalOpenAIResult = await callOpenAI({
+        inputImagePath: renderJob.inputImagePath, // Use the path stored in the DB job
+        roomType: renderJob.roomType,
+        lighting: renderJob.lighting,
+        userId: renderJob.userId.toString(),
+      });
+      console.log(`[Job ${bullJobId} / UUID ${jobUuid}] OpenAI returned. Success: ${finalOpenAIResult.success}`);
     }
-    console.log(`[Job ${bullJobId} / UUID ${jobUuid}] OpenAI generation successful.`);
+
+    // Check result from the relevant AI step(s)
+    if (!finalOpenAIResult?.success || !finalOpenAIResult?.imageData) {
+      throw new Error(finalOpenAIResult?.error || 'Failed to generate final render in OpenAI (missing image data)');
+    }
+    console.log(`[Job ${bullJobId} / UUID ${jobUuid}] Final AI generation successful.`);
     await job.updateProgress(50); // Correct method: updateProgress
 
     // 4. Update status to UPLOADING using the correct UUID
@@ -150,7 +219,7 @@ export async function executeRenderPipeline(job: Job<RenderJobData>): Promise<{ 
     // 5. Upload to UploadThing
     console.log(`[Job ${bullJobId} / UUID ${jobUuid}] Calling UploadThing...`);
     uploadResult = await uploadRenderedImage({
-      imageData: openAIResult.imageData,
+      imageData: finalOpenAIResult.imageData, // Use the final result image data
       // filename: `render_${jobUuid}.png` // Example: Pass context if needed
     });
     console.log(`[Job ${bullJobId} / UUID ${jobUuid}] UploadThing returned. Success: ${uploadResult.success}`);
@@ -170,7 +239,7 @@ export async function executeRenderPipeline(job: Job<RenderJobData>): Promise<{ 
         .set({
           status: RenderStatus.COMPLETED,
           resultImagePath: uploadResult.imageUrl,
-          prompt: openAIResult.prompt,
+          prompt: finalOpenAIResult.prompt, // Use prompt from final AI result
           completedAt: new Date(),
           // errorMessage will be updated later if non-critical steps fail
         })
@@ -201,15 +270,16 @@ export async function executeRenderPipeline(job: Job<RenderJobData>): Promise<{ 
         columns: { credits: true }
       });
       if (!teamData) throw new Error('Team not found for credit deduction.');
-      if (teamData.credits < 1) throw new Error('Insufficient credits for deduction.');
+      // Check against the correct number of credits for the flow type
+      if (teamData.credits < creditsToDeduct) throw new Error(`Insufficient credits for deduction (${creditsToDeduct} required).`);
 
       const updateResult = await db
         .update(teams)
         .set({
-          credits: sql`${teams.credits} - 1`, // Use SQL expression for atomic update
+          credits: sql`${teams.credits} - ${creditsToDeduct}`, // Deduct correct amount
           updatedAt: new Date(),
         })
-        .where(and(eq(teams.id, renderJob.teamId), sql`${teams.credits} >= 1`)) // Ensure credits >= 1
+        .where(and(eq(teams.id, renderJob.teamId), sql`${teams.credits} >= ${creditsToDeduct}`)) // Ensure sufficient credits
         .returning({ id: teams.id });
 
       if (updateResult.length > 0) {
@@ -239,8 +309,8 @@ export async function executeRenderPipeline(job: Job<RenderJobData>): Promise<{ 
         await db.insert(creditTransactions).values({
           teamId: renderJob.teamId,
           userId: renderJob.userId,
-          amount: -1,
-          description: `Credit used for render: ${renderJob.title}`,
+          amount: -creditsToDeduct, // Log correct amount deducted
+          description: `Credit used for ${jobType === 'room-placement' ? 'Room Placement' : 'Collage'} render: ${renderJob.title}`, // More specific description
           balanceAfter: balanceAfter,
           renderJobId: renderJob.id, // Use the UUID from the fetched renderJob object
         });

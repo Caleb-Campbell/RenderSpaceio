@@ -34,7 +34,14 @@ export const renderQueue = new Queue(RENDER_QUEUE_NAME, {
 
 // Define and export the job data interface
 export interface RenderJobData {
-  jobId: string;
+  jobId: string; // The UUID from the database render_jobs table
+  type?: 'room-placement' | string; // Optional: To differentiate job types in the worker
+  roomPhotoUrl?: string; // Optional: Only needed for room-placement
+  collageImageUrl?: string; // Optional: Only needed for room-placement
+  // Include other details if needed by worker (e.g., roomType, lighting)
+  // These were added to the jobData in the API route, so include them here too
+  roomType?: string;
+  lighting?: string;
 }
 
 // Create the worker instance
