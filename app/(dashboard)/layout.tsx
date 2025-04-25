@@ -15,7 +15,7 @@ import { useUser } from '@/lib/auth';
 import { signOut } from '@/app/(login)/actions';
 import { useRouter } from 'next/navigation';
 import Image from 'next/image';
-import { usePostHog } from 'posthog-js/react';
+import posthog from 'posthog-js'; // Import posthog directly
 import toast from 'react-hot-toast';
 import { RenderJob } from '@/lib/db/schema'; // Import RenderJob type
 
@@ -110,32 +110,6 @@ function Footer() {
   );
 }
 
-function SupportButton() {
-  const posthog = usePostHog();
-
-  const handleSupportClick = () => {
-    // Capture an event. Configure a PostHog survey/widget
-    // to trigger based on this event in your PostHog project settings.
-    posthog?.capture('support_widget_opened');
-
-    // Alternatively, if using the standard PostHog toolbar for feedback:
-    // posthog?.loadToolbar({ props: { temporaryToken: 'YOUR_TEMP_TOKEN' } });
-    // Replace 'YOUR_TEMP_TOKEN' if needed, or remove props if not.
-  };
-
-  return (
-    <Button
-      variant="outline"
-      size="icon"
-      className="fixed bottom-6 right-6 z-50 rounded-full shadow-lg"
-      onClick={handleSupportClick}
-      aria-label="Support"
-    >
-      <MessageSquareQuoteIcon className="h-5 w-5" />
-    </Button>
-  );
-}
-
 // Define the expected structure of the SSE message data
 interface RenderEventData {
   jobId: string;
@@ -148,8 +122,44 @@ interface RenderEventData {
 export default function Layout({ children }: { children: React.ReactNode }) {
   const eventSourceRef = useRef<EventSource | null>(null);
   const { userPromise } = useUser();
-  const user = use(userPromise);
+  const user = use(userPromise); // User object is available here
   // Removed activeJobChecked ref
+
+  // --- Define SupportButton inside Layout to access user ---
+  function SupportButton() {
+    const handleSupportClick = () => {
+      // Identify the user in PostHog if they are logged in
+      if (user) {
+        posthog.identify(user.id.toString()); // Convert user ID to string
+      } else {
+        // Optional: Reset identification if user is logged out
+        posthog.reset();
+      }
+
+      // Load a specific survey by its ID using the imported instance.
+      // Make sure you have created a survey with this ID in your PostHog project.
+      // @ts-ignore - Type definitions might be missing loadSurvey
+      posthog.loadSurvey('YOUR_HELP_REQUEST_SURVEY_ID'); // TODO: Replace with your actual PostHog Survey ID
+
+      // If you were previously using event capture to trigger the survey:
+      // posthog?.loadToolbar({ props: { temporaryToken: 'YOUR_TEMP_TOKEN' } });
+      // Replace 'YOUR_TEMP_TOKEN' if needed, or remove props if not.
+    };
+
+    return (
+      <Button
+        variant="outline"
+        size="icon"
+        className="fixed bottom-6 right-6 z-50 rounded-full shadow-lg"
+        onClick={handleSupportClick}
+        aria-label="Support"
+      >
+        <MessageSquareQuoteIcon className="h-5 w-5" />
+      </Button>
+    );
+  }
+  // --- End SupportButton definition ---
+
 
   // Effect to check for active render job on initial load or user change
   useEffect(() => {
@@ -317,9 +327,6 @@ export default function Layout({ children }: { children: React.ReactNode }) {
       <Header />
       <main className="flex-grow">{children}</main>
       <Footer />
-      <Suspense fallback={null}> {/* Ensure PostHog is loaded */}
-        <SupportButton />
-      </Suspense>
     </section>
   );
 }

@@ -8,6 +8,7 @@ import { extractRouterConfig } from 'uploadthing/server';
 import { uploadRouter } from '@/lib/uploadthing';
 import { PostHogProvider } from '@/components/PostHogProvider';
 import { Toaster } from 'react-hot-toast'; // Added Toaster import
+import Head from 'next/head';
 
 export const metadata: Metadata = {
   title: 'RenderSpace - AI Interior Design Visualization',
@@ -28,6 +29,7 @@ export default function RootLayout({
   let userPromise = getUser();
 
   return (
+    <>
     <html
       lang="en"
       className={`bg-background text-foreground ${manrope.className}`}
@@ -49,5 +51,7 @@ export default function RootLayout({
         </PostHogProvider>
       </body>
     </html>
+    </>
+
   );
 }
